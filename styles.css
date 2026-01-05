@@ -1899,3 +1899,62 @@ a:hover {
   background: var(--color-primary-light);
   box-shadow: 0 0 8px var(--color-primary);
 }
+
+/* Footer */
+.site-footer {
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  padding: var(--space-xl) var(--space-lg);
+  margin-top: var(--space-xxl);
+  text-align: center;
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-md);
+}
+
+.footer-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: color 0.2s;
+}
+
+.footer-links a:hover {
+  color: var(--color-primary);
+}
+
+.footer-copyright {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+/* Static Pages */
+.static-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: var(--space-xl);
+}
+
+.static-page h1 {
+  margin-bottom: var(--space-sm);
+}
+
+.static-page h2 {
+  margin-top: var(--space-lg);
+  margin-bottom: var(--space-sm);
+  font-size: 1.2rem;
+}
+
+.static-page ul {
+  padding-left: var(--space-lg);
+}
+
+.static-page li {
+  margin-bottom: var(--space-xs);
+}

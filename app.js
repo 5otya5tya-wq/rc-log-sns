@@ -206,6 +206,12 @@ class VRCKaibenApp {
             <label class="form-label">メールアドレス</label>
             <input type="email" class="form-input" id="authEmail" placeholder="example@email.com">
           </div>
+          ${mode === 'register' ? `
+          <div class="form-group">
+            <label class="form-label">ユーザー名（表示名）</label>
+            <input type="text" class="form-input" id="authDisplayName" placeholder="ニックネーム" maxlength="20">
+          </div>
+          ` : ''}
           <div class="form-group">
             <label class="form-label">パスワード</label>
             <input type="password" class="form-input" id="authPassword" placeholder="パスワード（6文字以上）">
@@ -236,6 +242,7 @@ class VRCKaibenApp {
 
   async doRegister() {
     const email = document.getElementById('authEmail')?.value?.trim();
+    const displayName = document.getElementById('authDisplayName')?.value?.trim() || email?.split('@')[0];
     const password = document.getElementById('authPassword')?.value;
     const errorEl = document.getElementById('authError');
 
@@ -245,14 +252,18 @@ class VRCKaibenApp {
     try {
       errorEl.textContent = '登録中...';
       const cred = await this.auth.createUserWithEmailAndPassword(email, password);
+
+      // Send email verification
+      await cred.user.sendEmailVerification();
+
       // Create user profile in Firestore
       await this.db.collection('users').doc(cred.user.uid).set({
         email: email,
-        displayName: email.split('@')[0],
+        displayName: displayName,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
       });
       this.closeModal();
-      this.showToast('🎉 登録完了！ようこそ！', 'success');
+      this.showToast('🎉 登録完了！確認メールを送信しました。メールをご確認ください。', 'success');
     } catch (e) {
       console.error(e);
       errorEl.textContent = this.getAuthErrorMessage(e.code);
@@ -303,7 +314,7 @@ class VRCKaibenApp {
     const loginBtn = document.getElementById('loginBtn');
     if (loginBtn) {
       if (this.isLoggedIn) {
-        loginBtn.innerHTML = `<span>👤 ${this.currentUser}</span>`;
+        loginBtn.innerHTML = `<span>👤 ${this.currentUserName || '名無し'}</span>`;
         loginBtn.onclick = () => { if (confirm('ログアウトしますか？')) this.logout(); };
       } else {
         loginBtn.innerHTML = '🔑 ログイン';
@@ -351,10 +362,129 @@ class VRCKaibenApp {
       case 'list': this.renderListPage(); break;
       case 'detail': this.renderDetailPage(param); break;
       case 'post': this.renderPostPage(); break;
-      case 'post': this.renderPostPage(); break;
       case 'myPage': this.renderMyPage(); break;
       case 'admin': this.renderAdminPage(); break;
+      case 'terms': this.renderTermsPage(); break;
+      case 'privacy': this.renderPrivacyPage(); break;
     }
+  }
+
+  showPage(page) {
+    // For static pages like terms/privacy
+    this.navigateTo(page);
+  }
+
+  renderTermsPage() {
+    const container = document.getElementById('detailContent');
+    container.innerHTML = `
+      <div class="static-page card">
+        <h1>📜 利用規約</h1>
+        <p class="text-muted">最終更新: 2026年1月</p>
+        <hr>
+        
+        <h2>第1条（適用）</h2>
+        <p>この利用規約（以下、「本規約」といいます。）は、VRChat改変ログ（以下、「当サービス」といいます。）の利用条件を定めるものです。登録ユーザーの皆さま（以下、「ユーザー」といいます。）には、本規約に従って、当サービスをご利用いただきます。</p>
+        
+        <h2>第2条（利用登録）</h2>
+        <ol>
+          <li>登録希望者が当サービスの定める方法によって利用登録を申請し、当サービスがこれを承認することによって、利用登録が完了するものとします。</li>
+          <li>当サービスは、以下の事由がある場合、利用登録を承認しないことがあります。
+            <ul>
+              <li>利用登録の申請に際して虚偽の事項を届け出た場合</li>
+              <li>本規約に違反したことがある者からの申請である場合</li>
+              <li>その他、当サービスが利用登録を相当でないと判断した場合</li>
+            </ul>
+          </li>
+        </ol>
+        
+        <h2>第3条（ユーザーIDおよびパスワードの管理）</h2>
+        <ol>
+          <li>ユーザーは、自己の責任において、当サービスのユーザーIDおよびパスワードを適切に管理するものとします。</li>
+          <li>ユーザーは、いかなる場合にも、ユーザーIDおよびパスワードを第三者に譲渡または貸与することはできません。</li>
+        </ol>
+        
+        <h2>第4条（コンテンツの投稿）</h2>
+        <ol>
+          <li>ユーザーは、投稿するコンテンツについて、自らが投稿する適法な権利を有していること、および第三者の権利を侵害していないことを保証するものとします。</li>
+          <li>ユーザーは、投稿コンテンツについて、当サービスに対し、非独占的な使用、複製、配布に関するライセンスを付与します。</li>
+        </ol>
+        
+        <h2>第5条（禁止事項）</h2>
+        <p>ユーザーは、当サービスの利用にあたり、以下の行為をしてはなりません。</p>
+        <ol>
+          <li>法令または公序良俗に違反する行為</li>
+          <li>犯罪行為に関連する行為</li>
+          <li>著作権、商標権等の知的財産権を侵害する行為</li>
+          <li>サーバーまたはネットワークの機能を妨害する行為</li>
+          <li>他のユーザーへの嫌がらせ・誹謗中傷</li>
+          <li>不正アクセスまたはその試み</li>
+          <li>その他、当サービスが不適切と判断する行為</li>
+        </ol>
+        
+        <h2>第6条（免責事項）</h2>
+        <ol>
+          <li>当サービスは、本サービスに関して、ユーザーに生じたいかなる損害についても責任を負いません。</li>
+          <li>当サービスは、ユーザー間で生じた紛争について一切責任を負いません。</li>
+        </ol>
+        
+        <h2>第7条（サービス内容の変更等）</h2>
+        <p>当サービスは、ユーザーへの事前の告知をもって、本サービスの内容を変更または廃止することがあります。</p>
+        
+        <h2>第8条（利用規約の変更）</h2>
+        <p>当サービスは、必要と判断した場合には、ユーザーの同意を得ることなく本規約を変更することができます。</p>
+        
+        <h2>第9条（準拠法・裁判管轄）</h2>
+        <p>本規約の解釈にあたっては、日本法を準拠法とします。</p>
+        
+        <button class="btn btn-secondary mt-lg" onclick="app.navigateTo('home')">← ホームに戻る</button>
+      </div>
+    `;
+    document.getElementById('page-detail').classList.add('active');
+  }
+
+  renderPrivacyPage() {
+    const container = document.getElementById('detailContent');
+    container.innerHTML = `
+      <div class="static-page card">
+        <h1>🔒 プライバシーポリシー</h1>
+        <p class="text-muted">最終更新: 2026年1月</p>
+        <hr>
+        
+        <h2>第1条（個人情報）</h2>
+        <p>「個人情報」とは、個人情報保護法にいう「個人情報」を指すものとし、生存する個人に関する情報であって、特定の個人を識別できる情報を指します。</p>
+        
+        <h2>第2条（個人情報の収集方法）</h2>
+        <p>当サービスは、ユーザーが利用登録をする際にメールアドレス等の情報をお尋ねすることがあります。</p>
+        
+        <h2>第3条（個人情報を収集・利用する目的）</h2>
+        <p>当サービスが個人情報を収集・利用する目的は、以下のとおりです。</p>
+        <ol>
+          <li>当サービスのサービスの提供・運営のため</li>
+          <li>ユーザーからのお問い合わせに回答するため</li>
+          <li>メンテナンス、重要なお知らせなど必要に応じたご連絡のため</li>
+          <li>利用規約に違反したユーザーの特定・利用お断りのため</li>
+          <li>ユーザーにご自身の登録情報の閲覧や変更を行っていただくため</li>
+        </ol>
+        
+        <h2>第4条（個人情報の第三者提供）</h2>
+        <p>当サービスは、法令で認められる場合を除いて、あらかじめユーザーの同意を得ることなく、第三者に個人情報を提供することはありません。</p>
+        
+        <h2>第5条（個人情報の開示）</h2>
+        <p>当サービスは、本人から個人情報の開示を求められたときは、本人に対し、遅滞なくこれを開示します。</p>
+        
+        <h2>第6条（個人情報の訂正および削除）</h2>
+        <p>ユーザーは、当サービスの保有する自己の個人情報が誤った情報である場合には、訂正または削除を請求することができます。</p>
+        
+        <h2>第7条（プライバシーポリシーの変更）</h2>
+        <p>本ポリシーの内容は、ユーザーに通知することなく、変更することができるものとします。</p>
+        
+        <h2>第8条（お問い合わせ窓口）</h2>
+        <p>本ポリシーに関するお問い合わせは、TwitterのDMまたはお問い合わせフォームよりお願いいたします。</p>
+        
+        <button class="btn btn-secondary mt-lg" onclick="app.navigateTo('home')">← ホームに戻る</button>
+      </div>
+    `;
+    document.getElementById('page-detail').classList.add('active');
   }
 
   // ========================================
@@ -1164,10 +1294,58 @@ class VRCKaibenApp {
     const max = 5 - this.uploadedImages.length;
     Array.from(files).slice(0, max).forEach(f => {
       if (f.type.startsWith('image/')) {
-        const r = new FileReader();
-        r.onload = e => { this.uploadedImages.push({ id: 'img_' + Date.now() + Math.random().toString(36).substr(2, 5), dataUrl: e.target.result, isNsfw: false }); this.renderImagePreviews(); };
-        r.readAsDataURL(f);
+        this.compressImage(f).then(dataUrl => {
+          this.uploadedImages.push({
+            id: 'img_' + Date.now() + Math.random().toString(36).substr(2, 5),
+            dataUrl: dataUrl,
+            isNsfw: false
+          });
+          this.renderImagePreviews();
+        });
       }
+    });
+  }
+
+  // Image Compression - preserves text readability
+  compressImage(file, maxWidth = 1600, quality = 0.85) {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          // Calculate new dimensions
+          let width = img.width;
+          let height = img.height;
+
+          if (width > maxWidth) {
+            height = Math.round(height * (maxWidth / width));
+            width = maxWidth;
+          }
+
+          // Create canvas
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+
+          // Draw with high quality
+          const ctx = canvas.getContext('2d');
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Output as JPEG with specified quality
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+
+          // Log compression result
+          const originalSize = (e.target.result.length / 1024).toFixed(1);
+          const compressedSize = (compressedDataUrl.length / 1024).toFixed(1);
+          console.log(`Image compressed: ${originalSize}KB → ${compressedSize}KB (${Math.round((1 - compressedSize / originalSize) * 100)}% reduction)`);
+
+          resolve(compressedDataUrl);
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
     });
   }
   renderImagePreviews() {
