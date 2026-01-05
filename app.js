@@ -1224,8 +1224,15 @@ class VRCKaibenApp {
   async removeMasterItem(key, val) {
     if (!confirm(`"${val}" を削除しますか？`)) return;
     try {
+      const doc = await this.db.collection('masterData').doc('config').get();
+      if (!doc.exists) return;
+
+      const currentList = doc.data()[key] || [];
+      const newList = currentList.filter(item => item !== val);
+
       const updates = {};
-      updates[key] = firebase.firestore.FieldValue.arrayRemove(val);
+      updates[key] = newList;
+
       await this.db.collection('masterData').doc('config').update(updates);
       this.showToast('削除しました', 'success');
     } catch (e) { console.error(e); this.showToast('更新エラー', 'error'); }
@@ -1263,13 +1270,16 @@ class VRCKaibenApp {
 
   async removeAvatar(id) {
     if (!confirm('このアバター設定を削除しますか？')) return;
-    const avatar = this.avatars.find(a => a.id === id);
-    if (!avatar) return;
 
     try {
-      await this.db.collection('masterData').doc('config').update({
-        avatars: firebase.firestore.FieldValue.arrayRemove(avatar)
-      });
+      const doc = await this.db.collection('masterData').doc('config').get();
+      if (!doc.exists) return;
+      const data = doc.data();
+      const avatars = data.avatars || [];
+
+      const newAvatars = avatars.filter(a => a.id !== id);
+
+      await this.db.collection('masterData').doc('config').update({ avatars: newAvatars });
       this.showToast('削除しました', 'success');
     } catch (e) { console.error(e); this.showToast('削除エラー', 'error'); }
   }
@@ -1335,14 +1345,7 @@ class VRCKaibenApp {
   }
 
   // Admin Actions
-  deleteLog(id) {
-    if (confirm('本当にこのログを削除しますか？\nこの操作は取り消せません。')) {
-      this.logs = this.logs.filter(l => l.id !== id);
-      this.saveData('logs', this.logs);
-      this.renderAdminPage();
-      this.showToast('ログを削除しました');
-    }
-  }
+
 
   addAdminOption(type, inputId) {
     const input = document.getElementById(inputId);
