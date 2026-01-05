@@ -1311,6 +1311,28 @@ class VRCKaibenApp {
       });
     }
 
+    // Enter key support for other inputs
+    const enterInputs = [
+      { id: 'customPartsInput', action: () => this.addCustomPart() },
+      { id: 'customProblemInput', action: () => this.addCustomProblem() },
+      { id: 'customToolInput', action: () => this.addCustomTool() },
+      { id: 'referenceLinkInput', action: () => this.addReferenceLink() },
+      { id: 'imageUrlInput', action: () => this.addImageUrl() }
+    ];
+
+    enterInputs.forEach(item => {
+      const el = document.getElementById(item.id);
+      if (el) {
+        el.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            if (e.isComposing) return; // Ignore IME
+            e.preventDefault();
+            item.action();
+          }
+        });
+      }
+    });
+
     // Image handling
     const imageInput = document.getElementById('imageInput');
     const uploadArea = document.getElementById('imageUploadArea');
