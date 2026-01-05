@@ -63,11 +63,23 @@ class VRCKaibenApp {
   }
 
   setupAuthListener() {
-    this.auth.onAuthStateChanged(user => {
+    this.auth.onAuthStateChanged(async user => {
       if (user) {
         this.currentUser = user.uid;
         this.isLoggedIn = true;
-        this.currentUserName = user.displayName || '名無しさん';
+
+        // Get display name from Firestore
+        try {
+          const userDoc = await this.db.collection('users').doc(user.uid).get();
+          if (userDoc.exists) {
+            this.currentUserName = userDoc.data().displayName || '名無しさん';
+          } else {
+            this.currentUserName = user.email?.split('@')[0] || '名無しさん';
+          }
+        } catch (e) {
+          this.currentUserName = '名無しさん';
+        }
+
         this.updateLoginUI();
         this.loadUserBookmarks(user.uid);
       } else {
