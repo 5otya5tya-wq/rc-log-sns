@@ -1194,7 +1194,11 @@ class VRCKaibenApp {
     try {
       await this.db.collection('logs').doc(id).delete();
       this.showToast('ログを削除しました');
-    } catch (e) { console.error(e); this.showToast('削除エラー', 'error'); }
+    } catch (e) {
+      console.error(e);
+      const msg = e.code === 'permission-denied' ? '権限がありません (Permission Denied)' : e.message;
+      this.showToast('削除エラー: ' + msg, 'error');
+    }
   }
 
   adminResetPassword(u) {
@@ -1234,8 +1238,13 @@ class VRCKaibenApp {
       updates[key] = newList;
 
       await this.db.collection('masterData').doc('config').update(updates);
+      await this.db.collection('masterData').doc('config').update(updates);
       this.showToast('削除しました', 'success');
-    } catch (e) { console.error(e); this.showToast('更新エラー', 'error'); }
+    } catch (e) {
+      console.error(e);
+      const msg = e.code === 'permission-denied' ? '権限がありません' : e.message;
+      this.showToast('更新エラー: ' + msg, 'error');
+    }
   }
 
   async addAvatar() {
@@ -1281,7 +1290,11 @@ class VRCKaibenApp {
 
       await this.db.collection('masterData').doc('config').update({ avatars: newAvatars });
       this.showToast('削除しました', 'success');
-    } catch (e) { console.error(e); this.showToast('削除エラー', 'error'); }
+    } catch (e) {
+      console.error(e);
+      const msg = e.code === 'permission-denied' ? '権限がありません' : e.message;
+      this.showToast('削除エラー: ' + msg, 'error');
+    }
   }
 
   async updateLabel(key, value) {
