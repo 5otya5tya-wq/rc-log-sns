@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VRC改変ログ - アバター改変情報共有サイト</title>
+  <meta name="description" content="VRChatの改変情報を検索・共有できるサイト。初心者でも安心して改変に挑戦できる情報が満載。">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <!-- Auth Modal -->
+  <div id="authModal"></div>
+
+  <!-- ========================================
+       Header
+       ======================================== -->
+  <header class="header">
+    <div class="container header-inner">
+      <div class="logo">
+        <span class="logo-icon">🎀</span>
+        <span>VRC改変ログ</span>
+      </div>
+
+      <nav class="nav">
+        <a href="#" class="nav-link active" data-page="home">🏠 ホーム</a>
+        <a href="#" class="nav-link" data-page="list">📋 一覧</a>
+        <a href="#" class="nav-link" data-page="post">✏️ 投稿</a>
+        <a href="#" class="nav-link" data-page="myPage" title="マイページ" id="navMyPage" style="display:none">👤 マイページ</a>
+        <a href="#" class="nav-link" id="loginBtn">🔑 ログイン</a>
+      </nav>
+
+      <button class="theme-toggle" id="themeToggle" title="テーマ切替">🌙</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ========================================
+         Home Page
+         ======================================== -->
+    <section class="page active" id="page-home">
+      <div class="container">
+        <!-- Hero Section -->
+        <div class="hero">
+          <h1 class="hero-title">
+            <span class="hero-title-accent">VRChat改変</span>の情報を<br>みんなで共有しよう
+          </h1>
+          <p class="hero-description">
+            アバターの改変記録を投稿・検索できるサイトです。<br>
+            初心者さんも安心して改変に挑戦できる情報がいっぱい！
+          </p>
+        </div>
+      </div>
+
+      <!-- Announcements -->
+      <div id="homeAnnouncements" class="mb-lg"></div>
+
+      <!-- Search Box -->
+      <div class="search-box">
+        <div class="search-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input type="text" class="search-input" placeholder="キーワードで検索...">
+        </div>
+
+        <div class="search-filters">
+          <select class="form-select" id="searchAvatar" style="flex: 1; min-width: 150px;">
+            <option value="">すべてのアバター</option>
+          </select>
+
+          <select class="form-select" id="searchParts" style="flex: 1; min-width: 150px;">
+            <option value="">すべてのパーツ</option>
+          </select>
+
+          <label class="form-checkbox" id="searchBeginnerLabel">
+            <input type="checkbox" id="searchBeginner">
+            🌱 初心者OKのみ
+          </label>
+
+          <button class="btn btn-primary" id="homeSearchBtn">
+            検索する
+          </button>
+        </div>
+
+        <!-- Popular Tags -->
+        <div class="popular-tags mt-md" id="popularTags">
+          <!-- Tags rendered by JS -->
+        </div>
+      </div>
+
+      <!-- Recent Logs -->
+      <section class="mt-lg">
+        <h2 class="section-title">
+          <span class="section-title-icon">✨</span>
+          新着改変ログ
+        </h2>
+
+        <div class="card-grid" id="recentLogs">
+          <!-- Cards rendered by JS -->
+        </div>
+
+        <div class="text-center mt-lg">
+          <button class="btn btn-secondary" onclick="app.navigateTo('list')">
+            すべての改変ログを見る →
+          </button>
+        </div>
+      </section>
+      </div>
+    </section>
+
+    <!-- ========================================
+         List Page
+         ======================================== -->
+    <section class="page" id="page-list">
+      <div class="container">
+        <h1 class="section-title mt-lg">
+          <span class="section-title-icon">📋</span>
+          改変ログ一覧
+        </h1>
+
+        <!-- Filters -->
+        <div class="filter-bar">
+          <span class="text-muted" style="margin-right: var(--space-sm);">絞り込み:</span>
+          <button class="filter-chip" data-filter="beginner">🌱 初心者OK</button>
+          <button class="filter-chip" data-filter="noProblems">✅ 問題なし</button>
+          <button class="filter-chip" id="filterBookmark">❤️ お気に入り</button>
+          <span id="currentTagFilter"></span>
+        </div>
+
+        <!-- Log List -->
+        <div class="card-grid" id="logList">
+          <!-- Cards rendered by JS -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================
+         Detail Page
+         ======================================== -->
+    <section class="page" id="page-detail">
+      <div class="container" id="logDetail">
+        <!-- Detail content rendered by JS -->
+      </div>
+    </section>
+
+    <!-- ========================================
+         Post Page
+         ======================================== -->
+    <section class="page" id="page-post">
+      <div class="container">
+        <h1 class="section-title mt-lg">
+          <span class="section-title-icon">✏️</span>
+          改変ログを投稿
+        </h1>
+
+        <div id="postForm">
+          <!-- Form content rendered by JS based on login status -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================
+         My Page (Phase 4)
+         ======================================== -->
+    <section class="page" id="page-myPage">
+      <div class="container" id="myPageContent"></div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="container">
+      <p>🎀 VRC改変ログ - VRChatの改変情報共有サイト</p>
+      <p class="mt-sm text-muted">みんなの改変記録で、初心者さんをサポート！</p>
+      <div class="footer-links mt-md">
+        <a href="#" onclick="event.preventDefault(); app.navigateTo('admin');" class="footer-link">⚙️ 管理者設定</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ========================================
+       Admin Page (Hidden by default)
+       ======================================== -->
+  <section class="page" id="page-admin">
+    <div class="container">
+      <h1 class="section-title mt-lg">
+        <span class="section-title-icon">⚙️</span>
+        管理者設定
+      </h1>
+      <div id="adminContent"></div>
+    </div>
+  </section>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Lightbox -->
+  <div id="lightbox" class="lightbox">
+    <button class="lightbox-close">&times;</button>
+    <img id="lightboxImage" class="lightbox-content" src="" alt="">
+  </div>
+
+  <!-- Scripts -->
+  <!-- Firebase SDK (Compat) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+
+  <!-- App Scripts -->
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+
+</html>
