@@ -31,6 +31,13 @@ class VRCKaibenApp {
     this.problemOptions = [];
     this.toolOptions = [];
     this.avatarPresets = [];
+    this.labels = {
+      unity: 'Unityバージョン',
+      sdk: 'SDKバージョン',
+      parts: 'パーツ',
+      problem: '発生した問題',
+      tool: '使用ツール'
+    };
 
     this.init();
   }
@@ -129,6 +136,7 @@ class VRCKaibenApp {
         this.problemOptions = d.problemOptions || window.problemOptions || [];
         this.toolOptions = d.toolOptions || window.toolOptions || [];
         this.avatarPresets = d.avatarPresets || window.avatarPresets || []; // Fixed key
+        if (d.labels) this.labels = { ...this.labels, ...d.labels };
       } else {
         this.loadSampleDataToMemory();
       }
@@ -554,11 +562,15 @@ class VRCKaibenApp {
     }
 
     // Populate dropdowns
+    // Use dynamic labels if available
+    const avatarLabel = (this.labels && this.labels.avatar) || 'アバター';
+    const partsLabel = (this.labels && this.labels.parts) || 'パーツ';
+
     const avatarSelect = document.getElementById('searchAvatar');
-    if (avatarSelect) avatarSelect.innerHTML = '<option value="">すべてのアバター</option>' + this.avatars.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    if (avatarSelect) avatarSelect.innerHTML = `<option value="">すべての${this.escapeHtml(avatarLabel)}</option>` + this.avatars.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 
     const partsSelect = document.getElementById('searchParts');
-    if (partsSelect) partsSelect.innerHTML = '<option value="">すべてのパーツ</option>' + this.parts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    if (partsSelect) partsSelect.innerHTML = `<option value="">すべての${this.escapeHtml(partsLabel)}</option>` + this.parts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 
     // Dynamic Tags
     const popularTags = this.calculatePopularTags();
@@ -639,7 +651,7 @@ class VRCKaibenApp {
     const tagsHtml = (log.tags || []).slice(0, 3).map(tag => `<span class="tag-chip text-xs">${tag}</span>`).join('');
 
     // User name (cache lookup)
-    const userName = this.users[log.userId]?.displayName || '不明なユーザー';
+    const userName = log.guestName || this.users[log.userId]?.displayName || '不明なユーザー';
 
     // Difficulty badge class
     const diffClass = {
@@ -682,7 +694,8 @@ class VRCKaibenApp {
   }
 
   renderPostPage() {
-    if (!this.checkLoginForPage('postForm', '投稿')) return;
+    // Optional login check
+    this.checkLoginForPage('postForm', '投稿', true);
 
     // Reset inputs
     this.uploadedImages = [];
@@ -717,7 +730,7 @@ class VRCKaibenApp {
           </div>
           
           <div class="form-group">
-            <label class="form-label">パーツ（複数選択可）</label>
+            <label class="form-label">${this.labels.parts || 'パーツ'}（複数選択可）</label>
             <div class="form-checkbox-group" id="partsCheckboxes">
               ${this.parts.map(p => `
                 <span class="form-checkbox-item">
@@ -735,7 +748,7 @@ class VRCKaibenApp {
         </div>
 
         <div class="form-group">
-            <label class="form-label">使用ツール</label>
+            <label class="form-label">${this.labels.tool || '使用ツール'}</label>
             <div class="form-checkbox-group">
                 ${this.toolOptions.map((tool, idx) => `
                     <span class="form-checkbox-item">
@@ -753,14 +766,14 @@ class VRCKaibenApp {
         
         <div class="form-row">
             <div class="form-group">
-            <label class="form-label">Unityバージョン</label>
+            <label class="form-label">${this.labels.unity || 'Unityバージョン'}</label>
             <select class="form-select" id="logUnity">
               ${this.unityVersionOptions.map(v => `<option value="${v}" ${v === '2022.3.22f1' ? 'selected' : ''}>${v}</option>`).join('')}
             </select>
             <input type="text" class="form-input mt-sm" id="logUnityCustom" placeholder="バージョン入力" style="display: none;">
           </div>
           <div class="form-group">
-            <label class="form-label">VRC SDKバージョン</label>
+            <label class="form-label">${this.labels.sdk || 'VRC SDKバージョン'}</label>
             <select class="form-select" id="logSdk">
               ${this.vrcSdkVersionOptions.map(v => `<option value="${v}" ${v === '3.5.2' ? 'selected' : ''}>${v}</option>`).join('')}
             </select>
@@ -787,7 +800,7 @@ class VRCKaibenApp {
         </div>
         
         <div class="form-group">
-          <label class="form-label">発生した問題</label>
+          <label class="form-label">${this.labels.problem || '発生した問題'}</label>
           <div class="form-checkbox-group" id="problemCheckboxes">
             ${this.problemOptions.map((p, idx) => `
               <span class="form-checkbox-item">
@@ -939,19 +952,19 @@ class VRCKaibenApp {
   }
 
   renderMasterDataHTML() {
-    // Helper to generate editor for a specific list
-    const editor = (title, key, list) => `
-      <div class="master-editor-section" data-tab="${key}">
+    // Helper for List Editor (Parts, Options)
+    this.renderMasterDataHTML.editor = (title, key, list) => `
+      <div class="master-editor-section">
          <h4 class="text-sm mb-sm">${title}</h4>
          <div class="custom-input-row mb-sm">
-            <input type="text" id="new_${key}" class="form-input" placeholder="新しい項目">
+            <input type="text" id="newMaster_${key}" class="form-input" placeholder="新しい項目...">
             <button class="btn btn-primary btn-sm" onclick="app.addMasterItem('${key}')">追加</button>
          </div>
          <div class="data-list-scroll">
             ${list.map(item => `
                <span class="badge badge-outline">
                  ${this.escapeHtml(item)}
-                 <span class="badge-remove" onclick="app.removeMasterItem('${key}', '${item}')">&times;</span>
+                 <span class="badge-remove" onclick="app.removeMasterItem('${key}', '${item.replace(/'/g, "\\'")}')">&times;</span>
                </span>
             `).join('')}
          </div>
@@ -960,22 +973,115 @@ class VRCKaibenApp {
 
     return `
       <div class="admin-panel">
-        <div class="admin-panel-header">
-           <div class="admin-panel-title">🛠️ 完全マスターデータ管理</div>
-        </div>
+        <div class="admin-panel-header"><div class="admin-panel-title">🛠️ マスタデータ管理</div></div>
+        
         <div class="admin-tabs">
-           <button class="admin-tab active" onclick="app.switchAdminTab('unityVersionOptions')">Unity</button>
-           <button class="admin-tab" onclick="app.switchAdminTab('vrcSdkVersionOptions')">SDK</button>
-           <button class="admin-tab" onclick="app.switchAdminTab('avatarPresets')">Avatar</button>
-           <button class="admin-tab" onclick="app.switchAdminTab('problemOptions')">Problem</button>
-           <button class="admin-tab" onclick="app.switchAdminTab('toolOptions')">Tool</button>
+          <button class="admin-tab-btn active" onclick="app.switchMasterTab('avatar')">アバター設定</button>
+          <button class="admin-tab-btn" onclick="app.switchMasterTab('parts')">パーツ設定</button>
+          <button class="admin-tab-btn" onclick="app.switchMasterTab('options')">選択肢設定</button>
+          <button class="admin-tab-btn" onclick="app.switchMasterTab('system')">システム設定</button>
         </div>
-        <div class="admin-tab-content">
-           <div id="tab_unityVersionOptions" class="tab-pane active">${editor('Unity Versions', 'unityVersionOptions', this.unityVersionOptions)}</div>
-           <div id="tab_vrcSdkVersionOptions" class="tab-pane">${editor('VRC SDK Versions', 'vrcSdkVersionOptions', this.vrcSdkVersionOptions)}</div>
-           <div id="tab_avatarPresets" class="tab-pane">${editor('Avatar Presets', 'avatarPresets', this.avatarPresets)}</div>
-           <div id="tab_problemOptions" class="tab-pane">${editor('Problem Options', 'problemOptions', this.problemOptions)}</div>
-           <div id="tab_toolOptions" class="tab-pane">${editor('Tool Options', 'toolOptions', this.toolOptions)}</div>
+
+        <div id="masterTab_avatar" class="master-tab-content">
+          ${this.renderAvatarEditor()}
+        </div>
+        <div id="masterTab_parts" class="master-tab-content" style="display:none">
+          ${this.renderMasterDataHTML.editor(this.labels.parts || 'パーツ', 'parts', this.parts)}
+        </div>
+        <div id="masterTab_options" class="master-tab-content" style="display:none">
+          ${this.renderMasterDataHTML.editor(this.labels.unity || 'Unityバージョン', 'unityVersions', this.unityVersionOptions)}
+          ${this.renderMasterDataHTML.editor(this.labels.sdk || 'SDKバージョン', 'vrcSdkVersions', this.vrcSdkVersionOptions)}
+          ${this.renderMasterDataHTML.editor(this.labels.problem || '発生した問題', 'problemOptions', this.problemOptions)}
+          ${this.renderMasterDataHTML.editor(this.labels.tool || '使用ツール', 'toolOptions', this.toolOptions)}
+          ${this.renderMasterDataHTML.editor('アバタープリセット(旧)', 'avatarPresets', this.avatarPresets)}
+        </div>
+        <div id="masterTab_system" class="master-tab-content" style="display:none">
+          ${this.renderSystemSettings()}
+        </div>
+      </div>
+    `;
+  }
+
+  // Admin Tab Switcher & Editors
+  switchMasterTab(tabName) {
+    document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+    event.target.classList.add('active');
+    document.querySelectorAll('.master-tab-content').forEach(c => c.style.display = 'none');
+    document.getElementById('masterTab_' + tabName).style.display = 'block';
+  }
+
+  renderAvatarEditor() {
+    return `
+      <div class="avatar-edit-form">
+        <h4 class="text-sm mb-sm">新規アバター追加</h4>
+        <div class="form-row">
+          <div class="form-group">
+            <input type="text" id="newAvatarName" class="form-input" placeholder="アバター名 (必須)">
+          </div>
+          <div class="form-group">
+            <input type="text" id="newAvatarCreator" class="form-input" placeholder="クリエイター名">
+          </div>
+          <div class="form-group">
+             <input type="text" id="newAvatarImage" class="form-input" placeholder="画像URL (任意)">
+          </div>
+          <button class="btn btn-primary" onclick="app.addAvatar()">追加</button>
+        </div>
+        <div id="avatarAddError" class="text-danger text-sm mt-xs"></div>
+      </div>
+      
+      <div class="admin-table-container">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th style="width: 60px;">画像</th>
+              <th>アバター名</th>
+              <th>クリエイター</th>
+              <th style="width: 100px;">操作</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${this.avatars.map(a => `
+              <tr>
+                <td><img src="${a.imageUrl || 'https://via.placeholder.com/40'}" class="admin-avatar-thumb" onerror="this.src='https://via.placeholder.com/40'"></td>
+                <td>${this.escapeHtml(a.name)}</td>
+                <td>${this.escapeHtml(a.creator || '-')}</td>
+                <td>
+                   <div class="admin-actions">
+                     <button class="btn btn-danger btn-icon-sm" onclick="app.removeAvatar('${a.id}')">削除</button>
+                   </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  renderSystemSettings() {
+    return `
+      <div class="cfg-section">
+        <h4 class="text-sm mb-md">表示ラベル設定 (カテゴリ名の変更)</h4>
+        
+        <div class="config-label-edit">
+          <label>Unityバージョン</label>
+          <input type="text" class="form-input" value="${this.escapeHtml(this.labels.unity || 'Unityバージョン')}" onchange="app.updateLabel('unity', this.value)">
+        </div>
+        <div class="config-label-edit">
+          <label>SDKバージョン</label>
+          <input type="text" class="form-input" value="${this.escapeHtml(this.labels.sdk || 'SDKバージョン')}" onchange="app.updateLabel('sdk', this.value)">
+        </div>
+        <div class="config-label-edit">
+          <label>パーツ</label>
+          <input type="text" class="form-input" value="${this.escapeHtml(this.labels.parts || 'パーツ')}" onchange="app.updateLabel('parts', this.value)">
+        </div>
+        <div class="config-label-edit">
+           <label>発生した問題</label>
+           <input type="text" class="form-input" value="${this.escapeHtml(this.labels.problem || '発生した問題')}" onchange="app.updateLabel('problem', this.value)">
+        </div>
+        <div class="config-label-edit">
+           <label>使用ツール</label>
+           <input type="text" class="form-input" value="${this.escapeHtml(this.labels.tool || '使用ツール')}" onchange="app.updateLabel('tool', this.value)">
         </div>
       </div>
     `;
@@ -1100,8 +1206,9 @@ class VRCKaibenApp {
   }
 
   // Master Data Helper
+  // Master Data Helper
   async addMasterItem(key) {
-    const input = document.getElementById('new_' + key);
+    const input = document.getElementById('newMaster_' + key);
     const val = input ? input.value.trim() : null;
     if (!val) return;
 
@@ -1109,7 +1216,7 @@ class VRCKaibenApp {
       const updates = {};
       updates[key] = firebase.firestore.FieldValue.arrayUnion(val);
       await this.db.collection('masterData').doc('config').set(updates, { merge: true });
-      this.showToast('追加しました');
+      this.showToast('追加しました', 'success');
       input.value = '';
     } catch (e) { console.error(e); this.showToast('更新エラー', 'error'); }
   }
@@ -1120,8 +1227,59 @@ class VRCKaibenApp {
       const updates = {};
       updates[key] = firebase.firestore.FieldValue.arrayRemove(val);
       await this.db.collection('masterData').doc('config').update(updates);
-      this.showToast('削除しました');
+      this.showToast('削除しました', 'success');
     } catch (e) { console.error(e); this.showToast('更新エラー', 'error'); }
+  }
+
+  async addAvatar() {
+    const name = document.getElementById('newAvatarName').value.trim();
+    const creator = document.getElementById('newAvatarCreator').value.trim();
+    const image = document.getElementById('newAvatarImage').value.trim();
+
+    if (!name) {
+      document.getElementById('avatarAddError').textContent = 'アバター名は必須です';
+      return;
+    }
+
+    const newAvatar = {
+      id: 'av_' + Date.now(),
+      name: name,
+      creator: creator,
+      imageUrl: image
+    };
+
+    try {
+      await this.db.collection('masterData').doc('config').update({
+        avatars: firebase.firestore.FieldValue.arrayUnion(newAvatar)
+      });
+      this.showToast('アバターを追加しました', 'success');
+      // Clear inputs
+      document.getElementById('newAvatarName').value = '';
+      document.getElementById('newAvatarCreator').value = '';
+      document.getElementById('newAvatarImage').value = '';
+      document.getElementById('avatarAddError').textContent = '';
+    } catch (e) { console.error(e); this.showToast('エラーが発生しました', 'error'); }
+  }
+
+  async removeAvatar(id) {
+    if (!confirm('このアバター設定を削除しますか？')) return;
+    const avatar = this.avatars.find(a => a.id === id);
+    if (!avatar) return;
+
+    try {
+      await this.db.collection('masterData').doc('config').update({
+        avatars: firebase.firestore.FieldValue.arrayRemove(avatar)
+      });
+      this.showToast('削除しました', 'success');
+    } catch (e) { console.error(e); this.showToast('削除エラー', 'error'); }
+  }
+
+  async updateLabel(key, value) {
+    try {
+      const labels = { ...this.labels, [key]: value };
+      await this.db.collection('masterData').doc('config').set({ labels }, { merge: true });
+      this.showToast('ラベルを更新しました', 'success');
+    } catch (e) { console.error(e); this.showToast('ラベル更新エラー', 'error'); }
   }
 
 
@@ -1474,7 +1632,11 @@ class VRCKaibenApp {
   removeImage(i) { this.uploadedImages.splice(i, 1); this.renderImagePreviews(); }
 
   async submitLog() {
-    if (!this.currentUser) { this.showToast('ログインしてください', 'error'); this.login(); return; }
+    // Guest Access Allowed
+    // if (!this.currentUser) { this.showToast('ログインしてください', 'error'); this.login(); return; }
+
+    const isGuest = !this.currentUser;
+    const currentUid = this.currentUser || 'guest';
 
     const title = document.getElementById('logTitle').value;
     let avatarId = document.getElementById('logAvatar').value;
@@ -1507,7 +1669,7 @@ class VRCKaibenApp {
       title, avatarId, customAvatarName, partsIds: parts, customPartsNames: this.customParts,
       unityVersion: unity, vrcSdkVersion: sdk, difficulty: diff, successRate: success, problems: probs, solution,
       tags: this.selectedTags, tools, referenceLinks: this.referenceLinks, images: imgs,
-      createdAt: new Date().toISOString(), userId: this.currentUser,
+      createdAt: new Date().toISOString(), userId: currentUid, isGuest, guestName: isGuest ? 'ゲスト' : null,
       // Firestore Metadata
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
@@ -1630,8 +1792,10 @@ class VRCKaibenApp {
     }).join('');
   }
 
-  checkLoginForPage(containerId, title) {
+  checkLoginForPage(containerId, title, isOptional = false) {
     if (!this.isLoggedIn) {
+      if (isOptional) return true; // Allow access if optional
+
       const c = document.getElementById(containerId);
       if (c) c.innerHTML = `<div class="login-notice"><div class="login-notice-icon">🔐</div><h3 class="login-notice-title">ログインが必要です</h3><p class="login-notice-text">${title}にはログインしてください</p><button class="btn btn-primary" onclick="app.login()">🔑 ログイン</button></div>`;
       return false;
@@ -1668,7 +1832,7 @@ class VRCKaibenApp {
   }
 
   async toggleBookmark(id) {
-    if (!this.currentUser) { this.showToast('ログインしてください', 'error'); return; }
+    if (!this.currentUser) { this.showToast('ブックマークするにはログインが必要です', 'warning'); return; }
 
     const isAdded = !this.bookmarks.includes(id);
     if (!isAdded) {
