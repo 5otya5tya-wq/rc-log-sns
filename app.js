@@ -78,7 +78,8 @@ class VRCKaibenApp {
         this.bookmarks = [];
       }
       // Re-render based on auth
-      if (document.getElementById('myPage').classList.contains('active')) this.renderMyPage();
+      const myPageEl = document.getElementById('myPage');
+      if (myPageEl && myPageEl.classList.contains('active')) this.renderMyPage();
     });
   }
 
@@ -101,7 +102,8 @@ class VRCKaibenApp {
     // 3. Announcements
     this.db.collection('announcements').orderBy('date', 'desc').limit(5).onSnapshot(snap => {
       this.announcements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      this.renderAnnouncements();
+      // Update home page if on it
+      if (this.currentPage === 'home') this.renderHomePage();
     });
 
     // 4. Master Data
