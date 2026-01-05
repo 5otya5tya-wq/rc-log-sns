@@ -616,6 +616,71 @@ class VRCKaibenApp {
     }
   }
 
+  renderLogCards(containerId, logs) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+
+    if (logs.length === 0) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div><p>ログが見つかりません</p></div>`;
+      return;
+    }
+
+    container.innerHTML = logs.map(log => this.createLogCard(log)).join('');
+  }
+
+  createLogCard(log) {
+    const avatarName = this.getAvatarName(log.avatarId) || log.customAvatarName || 'Unknown';
+    const dateStr = new Date(log.createdAt).toLocaleDateString();
+
+    // Star rating
+    const stars = '★'.repeat(log.successRate) + '☆'.repeat(5 - log.successRate);
+
+    // Tags
+    const tagsHtml = (log.tags || []).slice(0, 3).map(tag => `<span class="tag-chip text-xs">${tag}</span>`).join('');
+
+    // User name (cache lookup)
+    const userName = this.users[log.userId]?.displayName || '不明なユーザー';
+
+    // Difficulty badge class
+    const diffClass = {
+      'beginner': 'badge-success',
+      'intermediate': 'badge-warning',
+      'advanced': 'badge-danger'
+    }[log.difficulty] || 'badge-secondary';
+
+    const diffLabel = {
+      'beginner': '初心者向け',
+      'intermediate': '中級者向け',
+      'advanced': '上級者向け'
+    }[log.difficulty] || 'その他';
+
+    // Image logic - placeholder for now since we don't host images
+    // Could use a generic pattern or icon
+
+    return `
+      <div class="log-card" onclick="app.navigateTo('detail', '${log.id}')">
+        <div class="log-card-header">
+           <span class="badge ${diffClass}">${diffLabel}</span>
+           <span class="text-xs text-muted">${dateStr}</span>
+        </div>
+        <h3 class="log-card-title">${this.escapeHtml(log.title)}</h3>
+        <div class="log-card-meta">
+          <div>👤 ${this.escapeHtml(userName)}</div>
+          <div>👕 ${this.escapeHtml(avatarName)}</div>
+        </div>
+        <div class="log-card-rating text-warning">${stars}</div>
+        <div class="log-card-tags mt-xs">
+          ${tagsHtml}
+        </div>
+      </div>
+    `;
+  }
+
+  getAvatarName(id) {
+    const a = this.avatars.find(x => x.id === id);
+    return a ? a.name : null;
+  }
+
   renderPostPage() {
     if (!this.checkLoginForPage('postForm', '投稿')) return;
 
@@ -769,6 +834,10 @@ class VRCKaibenApp {
             <input type="file" id="imageInput" accept="image/*" multiple style="display: none;">
             <button type="button" class="btn btn-secondary" onclick="document.getElementById('imageInput').click()">📷 画像を選択</button>
             <span class="upload-hint">またはドラッグ&ドロップ</span>
+          </div>
+          <div class="custom-input-row mt-sm">
+             <input type="text" class="form-input" id="imageUrlInput" placeholder="https://... (画像URL)">
+             <button type="button" class="btn btn-secondary btn-sm" onclick="app.addImageUrl()">＋追加</button>
           </div>
           <div class="image-preview-grid" id="imagePreviewGrid"></div>
         </div>
@@ -1229,6 +1298,7 @@ class VRCKaibenApp {
     if (tagInput) {
       tagInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
+          if (e.isComposing) return; // Ignore IME composition
           e.preventDefault();
           let tag = tagInput.value.trim();
           if (tag && !tag.startsWith('#')) tag = '#' + tag;
@@ -1254,6 +1324,20 @@ class VRCKaibenApp {
     // Submit
     const form = document.getElementById('logForm');
     if (form) form.addEventListener('submit', (e) => { e.preventDefault(); this.submitLog(); });
+  }
+
+  addImageUrl() {
+    const input = document.getElementById('imageUrlInput');
+    const url = input?.value.trim();
+    if (url) {
+      this.uploadedImages.push({
+        id: 'img_' + Date.now() + Math.random().toString(36).substr(2, 5),
+        dataUrl: url,
+        isNsfw: false
+      });
+      this.renderImagePreviews();
+      input.value = '';
+    }
   }
 
   // ... (Other helpers: setupCallbackToggle, addTag, etc)
