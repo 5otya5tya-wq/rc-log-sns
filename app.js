@@ -201,12 +201,12 @@ class VRCKaibenApp {
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">ユーザー名</label>
-            <input type="text" class="form-input" id="authUsername" placeholder="ユーザー名">
+            <label class="form-label">メールアドレス</label>
+            <input type="email" class="form-input" id="authEmail" placeholder="example@email.com">
           </div>
           <div class="form-group">
             <label class="form-label">パスワード</label>
-            <input type="password" class="form-input" id="authPassword" placeholder="パスワード">
+            <input type="password" class="form-input" id="authPassword" placeholder="パスワード（6文字以上）">
           </div>
           <div id="authError" class="auth-error"></div>
           <div class="modal-actions">
@@ -232,51 +232,69 @@ class VRCKaibenApp {
     if (modal) modal.style.display = 'none';
   }
 
-  doRegister() {
-    const username = document.getElementById('authUsername')?.value?.trim();
+  async doRegister() {
+    const email = document.getElementById('authEmail')?.value?.trim();
     const password = document.getElementById('authPassword')?.value;
     const errorEl = document.getElementById('authError');
-    if (!username || !password) return errorEl.textContent = '入力を確認してください';
-    if (this.users[username]) return errorEl.textContent = '使用されているユーザー名です';
 
-    this.users[username] = { password: btoa(password), createdAt: new Date().toISOString() };
-    localStorage.setItem('vrc_users', JSON.stringify(this.users));
-    this.completeAuth(username, '登録しました！');
+    if (!email || !password) return errorEl.textContent = '入力を確認してください';
+    if (password.length < 6) return errorEl.textContent = 'パスワードは6文字以上にしてください';
+
+    try {
+      errorEl.textContent = '登録中...';
+      const cred = await this.auth.createUserWithEmailAndPassword(email, password);
+      // Create user profile in Firestore
+      await this.db.collection('users').doc(cred.user.uid).set({
+        email: email,
+        displayName: email.split('@')[0],
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      this.closeModal();
+      this.showToast('🎉 登録完了！ようこそ！', 'success');
+    } catch (e) {
+      console.error(e);
+      errorEl.textContent = this.getAuthErrorMessage(e.code);
+    }
   }
 
-  doLogin() {
-    const username = document.getElementById('authUsername')?.value?.trim();
+  async doLogin() {
+    const email = document.getElementById('authEmail')?.value?.trim();
     const password = document.getElementById('authPassword')?.value;
     const errorEl = document.getElementById('authError');
-    if (!username || !password) return errorEl.textContent = '入力を確認してください';
 
-    const user = this.users[username];
-    if (!user || user.password !== btoa(password)) return errorEl.textContent = '情報が正しくありません';
+    if (!email || !password) return errorEl.textContent = '入力を確認してください';
 
-    this.completeAuth(username, 'ログインしました！');
+    try {
+      errorEl.textContent = 'ログイン中...';
+      await this.auth.signInWithEmailAndPassword(email, password);
+      this.closeModal();
+      this.showToast('ログインしました！', 'success');
+    } catch (e) {
+      console.error(e);
+      errorEl.textContent = this.getAuthErrorMessage(e.code);
+    }
   }
 
-  completeAuth(username, message) {
-    this.isLoggedIn = true;
-    this.currentUser = username;
-    localStorage.setItem('vrc_logged_in', 'true');
-    localStorage.setItem('vrc_user', username);
-    this.updateLoginUI();
-    this.closeModal();
-    this.showToast(message, 'success');
-    this.navigateTo(this.currentPage);
+  getAuthErrorMessage(code) {
+    const messages = {
+      'auth/email-already-in-use': 'このメールアドレスは既に使用されています',
+      'auth/invalid-email': '無効なメールアドレスです',
+      'auth/weak-password': 'パスワードが弱すぎます',
+      'auth/user-not-found': 'ユーザーが見つかりません',
+      'auth/wrong-password': 'パスワードが間違っています',
+      'auth/invalid-credential': 'メールアドレスまたはパスワードが間違っています'
+    };
+    return messages[code] || 'エラーが発生しました';
   }
 
   login() { this.showAuthModal('login'); }
 
-  logout() {
-    this.isLoggedIn = false;
-    this.currentUser = null;
-    localStorage.removeItem('vrc_logged_in');
-    localStorage.removeItem('vrc_user');
-    this.updateLoginUI();
-    this.showToast('ログアウトしました', 'info');
-    this.navigateTo('home');
+  async logout() {
+    try {
+      await this.auth.signOut();
+      this.showToast('ログアウトしました', 'info');
+      this.navigateTo('home');
+    } catch (e) { console.error(e); }
   }
 
   updateLoginUI() {
@@ -1181,7 +1199,9 @@ class VRCKaibenApp {
     const tools = Array.from(document.querySelectorAll('input[name="tools"]:checked')).map(c => c.value);
     if (this.customTools.length) tools.push(...this.customTools);
 
-    const imgs = this.uploadedImages.map(i => ({ id: i.id, dataUrl: i.dataUrl, isNsfw: i.isNsfw }));
+    // Note: Not storing Base64 in Firestore (1MB limit). Images are local-only for now.
+    // TODO: Use Firebase Storage for proper image hosting
+    const imgs = this.uploadedImages.map(i => ({ id: i.id, isNsfw: i.isNsfw || false }));
 
     if (!title || !solution) { this.showToast('必須項目を入力してください', 'error'); return; }
 
@@ -1466,7 +1486,7 @@ class VRCKaibenApp {
              </div>
              <div class="profile-info">
                 <div class="profile-icon">
-                   ${user.icon ? `<img src="${user.icon}" alt="icon">` : '<span class="default-icon">👤</span>'}
+                   ${user.icon ? (user.icon.startsWith('http') ? `<img src="${user.icon}" alt="icon">` : `<span class="default-icon">${user.icon}</span>`) : '<span class="default-icon">👤</span>'}
                 </div>
                 <div class="profile-details">
                    <h2 class="profile-name">${this.escapeHtml(user.displayName || this.currentUser)}</h2>
@@ -1488,9 +1508,21 @@ class VRCKaibenApp {
                    <textarea id="editBio" class="form-textarea">${this.escapeHtml(user.bio || '')}</textarea>
                 </div>
                 <div class="form-group">
-                   <label class="form-label">アイコン画像 (URL)</label>
-                   <input type="text" id="editIcon" class="form-input" placeholder="https://..." value="${this.escapeHtml(user.icon || '')}">
+                   <label class="form-label">アイコン</label>
+                   <div class="icon-preset-grid">
+                     ${['👤', '🐱', '🐰', '🦊', '🐻', '🐼', '🐨', '🐸', '🦄', '🐺', '🦋', '🌸', '💀', '👻', '🤖', '🎀', '✨', '🌙', '⭐', '💫', '🔥', '❄️', '🌈', '💜'].map(emoji => `
+                       <button type="button" class="icon-preset-btn ${user.icon === emoji ? 'selected' : ''}" onclick="app.selectIconPreset('${emoji}')">${emoji}</button>
+                     `).join('')}
+                   </div>
+                   <input type="hidden" id="editIconPreset" value="${user.icon && user.icon.length <= 4 ? user.icon : ''}">
                 </div>
+                <details class="mt-sm">
+                   <summary class="text-muted text-sm" style="cursor:pointer;">🔧 上級者向け：カスタムURL</summary>
+                   <div class="form-group mt-sm">
+                      <input type="text" id="editIcon" class="form-input" placeholder="https://..." value="${user.icon && user.icon.startsWith('http') ? this.escapeHtml(user.icon) : ''}">
+                      <p class="text-muted text-xs mt-xs">Discord/Imgur等の画像URLを入力</p>
+                   </div>
+                </details>
                 <button class="btn btn-primary" onclick="app.saveProfile()">保存する</button>
              </div>
           </div>
@@ -1517,10 +1549,25 @@ class VRCKaibenApp {
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
   }
 
+  selectIconPreset(emoji) {
+    // Update hidden input
+    document.getElementById('editIconPreset').value = emoji;
+    // Clear custom URL
+    document.getElementById('editIcon').value = '';
+    // Update visual selection
+    document.querySelectorAll('.icon-preset-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.textContent === emoji);
+    });
+  }
+
   async saveProfile() {
     const dName = document.getElementById('editDisplayName').value.trim();
     const bio = document.getElementById('editBio').value.trim();
-    const icon = document.getElementById('editIcon').value.trim();
+    const customUrl = document.getElementById('editIcon').value.trim();
+    const presetEmoji = document.getElementById('editIconPreset').value;
+
+    // Priority: Custom URL > Preset Emoji
+    const icon = customUrl || presetEmoji || '';
 
     if (!this.currentUser) return;
 
