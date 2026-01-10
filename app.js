@@ -145,13 +145,14 @@ class VRCKaibenApp {
   }
 
   loadSampleDataToMemory() {
-    this.avatars = window.sampleAvatars || [];
-    this.parts = window.sampleParts || [];
-    this.unityVersionOptions = window.unityVersionOptions || [];
-    this.vrcSdkVersionOptions = window.vrcSdkVersionOptions || [];
-    this.problemOptions = window.problemOptions || [];
-    this.toolOptions = window.toolOptions || [];
-    this.avatarPresets = window.avatarPresets || [];
+    const sd = window.sampleData || {};
+    this.avatars = sd.avatars || [];
+    this.parts = sd.parts || [];
+    this.unityVersionOptions = sd.unityVersionOptions || [];
+    this.vrcSdkVersionOptions = sd.vrcSdkVersionOptions || [];
+    this.problemOptions = sd.problemOptions || [];
+    this.toolOptions = sd.toolOptions || [];
+    this.avatarPresets = sd.avatarPresets || [];
   }
 
   async loadUserBookmarks(uid) {
