@@ -8,174 +8,80 @@ class VRCKaibenApp {
     this.currentLogId = null;
     this.isLoggedIn = false;
     this.currentUser = null;
-    this.currentUserName = null;
     this.uploadedImages = [];
     this.selectedTags = [];
     this.customParts = [];
     this.customProblems = [];
     this.customTools = [];
     this.referenceLinks = [];
-    this.searchTag = null; // searchTag stored here
-
-    // Data Containers
-    this.logs = [];
-    this.users = {};
-    this.announcements = [];
-    this.bookmarks = [];
-
-    // Master Data
-    this.avatars = [];
-    this.parts = [];
-    this.unityVersionOptions = [];
-    this.vrcSdkVersionOptions = [];
-    this.problemOptions = [];
-    this.toolOptions = [];
-    this.avatarPresets = [];
-    this.labels = {
-      unity: 'Unityバージョン',
-      sdk: 'SDKバージョン',
-      parts: 'パーツ',
-      problem: '発生した問題',
-      tool: '使用ツール'
-    };
+    this.searchTag = null;
 
     this.init();
   }
 
   init() {
-    try {
-      if (!window.firebase) throw new Error("Firebase SDK missing");
-
-      // Initialize Firebase (Compat)
-      if (!firebase.apps.length) {
-        firebase.initializeApp(window.firebaseConfig);
-      }
-      this.db = firebase.firestore();
-      this.auth = firebase.auth();
-
-      // Listeners
-      this.setupAuthListener();
-      this.setupDataListeners();
-
-      this.bindEvents();
-      this.bindFormEvents(); // Ensure forms are bound
-      this.initTheme();
-      this.checkAnnouncementStatus();
-
-      // Initial Route
-      setTimeout(() => this.handleInitialRoute(), 500);
-    } catch (e) {
-      console.error(e);
-      alert("起動エラー: " + e.message);
-    }
-  }
-
-  setupAuthListener() {
-    this.auth.onAuthStateChanged(async user => {
-      if (user) {
-        this.currentUser = user.uid;
-        this.isLoggedIn = true;
-
-        // Get display name from Firestore
-        try {
-          const userDoc = await this.db.collection('users').doc(user.uid).get();
-          if (userDoc.exists) {
-            this.currentUserName = userDoc.data().displayName || '名無しさん';
-          } else {
-            this.currentUserName = user.email?.split('@')[0] || '名無しさん';
-          }
-        } catch (e) {
-          this.currentUserName = '名無しさん';
-        }
-
-        this.updateLoginUI();
-        this.loadUserBookmarks(user.uid);
-      } else {
-        this.currentUser = null;
-        this.isLoggedIn = false;
-        this.currentUserName = null;
-        this.updateLoginUI();
-        this.bookmarks = [];
-      }
-      // Re-render based on auth
-      const myPageEl = document.getElementById('myPage');
-      if (myPageEl && myPageEl.classList.contains('active')) this.renderMyPage();
-    });
-  }
-
-  setupDataListeners() {
-    // 1. Logs
-    this.db.collection('logs').orderBy('createdAt', 'desc').onSnapshot(snap => {
-      this.logs = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      this.calculatePopularTags();
-      if (this.currentPage === 'home') this.renderHomePage();
-      if (this.currentPage === 'list') this.renderListPage();
-    }, e => console.log('Logs sync error', e));
-
-    // 2. Users (Cache for display names)
-    this.db.collection('users').onSnapshot(snap => {
-      this.users = {};
-      snap.docs.forEach(doc => { this.users[doc.id] = doc.data(); });
-      if (this.currentPage === 'detail') { const id = this.currentLogId; if (id) this.renderDetailPage(id); } // Refresh detail to show new comments/names
-    });
-
-    // 3. Announcements
-    this.db.collection('announcements').orderBy('date', 'desc').limit(5).onSnapshot(snap => {
-      this.announcements = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      // Update home page if on it
-      if (this.currentPage === 'home') this.renderHomePage();
-    });
-
-    // 4. Master Data
-    this.db.collection('masterData').doc('config').onSnapshot(doc => {
-      if (doc.exists) {
-        const d = doc.data();
-        this.avatars = d.avatars || window.sampleAvatars || [];
-        this.parts = d.parts || window.sampleParts || [];
-        this.unityVersionOptions = d.unityVersions || window.unityVersionOptions || [];
-        this.vrcSdkVersionOptions = d.vrcSdkVersions || window.vrcSdkVersionOptions || [];
-        this.problemOptions = d.problemOptions || window.problemOptions || [];
-        this.toolOptions = d.toolOptions || window.toolOptions || [];
-        this.avatarPresets = d.avatarPresets || window.avatarPresets || []; // Fixed key
-        if (d.labels) this.labels = { ...this.labels, ...d.labels };
-      } else {
-        this.loadSampleDataToMemory();
-      }
-    });
-  }
-
-  loadSampleDataToMemory() {
-    this.avatars = window.sampleAvatars || [];
-    this.parts = window.sampleParts || [];
-    this.unityVersionOptions = window.unityVersionOptions || [];
-    this.vrcSdkVersionOptions = window.vrcSdkVersionOptions || [];
-    this.problemOptions = window.problemOptions || [];
-    this.toolOptions = window.toolOptions || [];
-    this.avatarPresets = window.avatarPresets || [];
-  }
-
-  async loadUserBookmarks(uid) {
-    try {
-      const doc = await this.db.collection('users').doc(uid).get();
-      if (doc.exists) this.bookmarks = doc.data().bookmarks || [];
-    } catch (e) { console.error(e); }
-  }
-
-  handleInitialRoute() {
+    this.loadData();
+    this.bindEvents();
+    this.initTheme();
+    this.checkLoginStatus();
     this.navigateTo('home');
   }
 
-  // Legacy Admin check wrapper
-  isAdmin() {
-    // Basic check: specific UID if needed, or claim. For now, enable admin for specific UID or just enable logical check?
-    // Let's rely on a hardcoded Admin UID for Phase 5 MVP if user provides one, OR just allow anyone named 'admin' (but names are free).
-    // Better: Check Firestore 'admins' collection or user field.
-    // MVP: If user email is 'admin@vrc.log'
-    const u = this.auth.currentUser;
-    return u && (u.email === 'admin@vrc.log' || this.users[u.uid]?.role === 'admin');
+  loadData() {
+    // Load or Initialize Data
+    // Priority: LocalStorage -> SampleData (Initialization)
+
+    // Core Data
+    this.avatars = JSON.parse(localStorage.getItem('vrc_avatars')) || window.sampleData.avatars;
+    this.parts = JSON.parse(localStorage.getItem('vrc_parts')) || window.sampleData.parts;
+    this.logs = JSON.parse(localStorage.getItem('vrc_logs')) || window.sampleData.logs;
+    this.users = JSON.parse(localStorage.getItem('vrc_users')) || {};
+    this.bookmarks = JSON.parse(localStorage.getItem('vrc_bookmarks')) || [];
+
+    // Master Data (Ultimate Control)
+    this.toolOptions = JSON.parse(localStorage.getItem('vrc_toolOptions')) || window.sampleData.toolOptions || [];
+    this.problemOptions = JSON.parse(localStorage.getItem('vrc_problemOptions')) || window.sampleData.problemOptions || [];
+    this.unityVersionOptions = JSON.parse(localStorage.getItem('vrc_unityVersionOptions')) || window.sampleData.unityVersionOptions || [];
+    this.vrcSdkVersionOptions = JSON.parse(localStorage.getItem('vrc_vrcSdkVersionOptions')) || window.sampleData.vrcSdkVersionOptions || [];
+    this.avatarPresets = JSON.parse(localStorage.getItem('vrc_avatarPresets')) || window.sampleData.avatarPresets || [];
+    this.announcements = JSON.parse(localStorage.getItem('vrc_announcements')) || window.sampleData.announcements || [];
+
+    // Save defaults back to LS if missing (Initial setup)
+    const masterKeys = [
+      ['toolOptions', this.toolOptions],
+      ['problemOptions', this.problemOptions],
+      ['unityVersionOptions', this.unityVersionOptions],
+      ['vrcSdkVersionOptions', this.vrcSdkVersionOptions],
+      ['avatarPresets', this.avatarPresets],
+      ['announcements', this.announcements]
+    ];
+
+    masterKeys.forEach(([key, data]) => {
+      if (!localStorage.getItem(`vrc_${key}`)) {
+        localStorage.setItem(`vrc_${key}`, JSON.stringify(data));
+      }
+    });
+
+    // Admin Configuration
+    this.ADMIN_USERS = ['admin']; // Only these usernames can access admin page
+
+    // Ensure admin user exists
+    if (!this.users['admin']) {
+      this.users['admin'] = { password: btoa('admin123'), createdAt: new Date().toISOString() };
+      localStorage.setItem('vrc_users', JSON.stringify(this.users));
+    }
   }
-  saveData(key, val) {
-    console.warn('saveData is deprecated for Cloud mode:', key);
+
+  isAdmin() {
+    return this.isLoggedIn && this.ADMIN_USERS.includes(this.currentUser);
+  }
+
+  saveData(key, data) {
+    // Update local cache
+    if (this[key]) this[key] = data;
+
+    // Save to LS
+    localStorage.setItem(`vrc_${key}`, JSON.stringify(data));
   }
 
   // ========================================
@@ -183,14 +89,14 @@ class VRCKaibenApp {
   // ========================================
 
   initTheme() {
-    const savedTheme = localStorage.getItem('theme') || 'pop'; // Default to Pop
+    const savedTheme = localStorage.getItem('theme') || 'light';
     document.documentElement.setAttribute('data-theme', savedTheme);
     this.updateThemeIcon(savedTheme);
   }
 
   toggleTheme() {
     const currentTheme = document.documentElement.getAttribute('data-theme');
-    const newTheme = currentTheme === 'cyber' ? 'pop' : 'cyber';
+    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     document.documentElement.setAttribute('data-theme', newTheme);
     localStorage.setItem('theme', newTheme);
     this.updateThemeIcon(newTheme);
@@ -198,34 +104,7 @@ class VRCKaibenApp {
 
   updateThemeIcon(theme) {
     const btn = document.getElementById('themeToggle');
-    if (btn) {
-      // Current is Pop -> Show Controller (Switch to Cyber)
-      // Current is Cyber -> Show Magic/Brush (Switch to Pop)
-      const iconName = theme === 'cyber' ? 'auto_fix_high' : 'sports_esports';
-      btn.innerHTML = `<span class="material-icons-round">${iconName}</span>`;
-      btn.title = theme === 'cyber' ? 'ポップモードに切り替え' : 'サイバーモードに切り替え';
-    }
-
-    // Update Logo
-    const logo = document.getElementById('siteLogo');
-    if (logo) {
-      logo.src = theme === 'cyber' ? 'logo-cyber.png' : 'logo-pop.png';
-    }
-  }
-
-  closeAnnouncement() {
-    const banner = document.getElementById('siteAnnouncement');
-    if (banner) {
-      banner.style.display = 'none';
-      sessionStorage.setItem('announcementClosed', 'true');
-    }
-  }
-
-  checkAnnouncementStatus() {
-    if (sessionStorage.getItem('announcementClosed') === 'true') {
-      const banner = document.getElementById('siteAnnouncement');
-      if (banner) banner.style.display = 'none';
-    }
+    if (btn) btn.textContent = theme === 'dark' ? '☀️' : '🌙';
   }
 
   // ========================================
@@ -251,18 +130,12 @@ class VRCKaibenApp {
         </div>
         <div class="modal-body">
           <div class="form-group">
-            <label class="form-label">メールアドレス</label>
-            <input type="email" class="form-input" id="authEmail" placeholder="example@email.com">
+            <label class="form-label">ユーザー名</label>
+            <input type="text" class="form-input" id="authUsername" placeholder="ユーザー名">
           </div>
-          ${mode === 'register' ? `
-          <div class="form-group">
-            <label class="form-label">ユーザー名（表示名）</label>
-            <input type="text" class="form-input" id="authDisplayName" placeholder="ニックネーム" maxlength="20">
-          </div>
-          ` : ''}
           <div class="form-group">
             <label class="form-label">パスワード</label>
-            <input type="password" class="form-input" id="authPassword" placeholder="パスワード（6文字以上）">
+            <input type="password" class="form-input" id="authPassword" placeholder="パスワード">
           </div>
           <div id="authError" class="auth-error"></div>
           <div class="modal-actions">
@@ -288,81 +161,58 @@ class VRCKaibenApp {
     if (modal) modal.style.display = 'none';
   }
 
-  async doRegister() {
-    const email = document.getElementById('authEmail')?.value?.trim();
-    const displayName = document.getElementById('authDisplayName')?.value?.trim() || email?.split('@')[0];
+  doRegister() {
+    const username = document.getElementById('authUsername')?.value?.trim();
     const password = document.getElementById('authPassword')?.value;
     const errorEl = document.getElementById('authError');
+    if (!username || !password) return errorEl.textContent = '入力を確認してください';
+    if (this.users[username]) return errorEl.textContent = '使用されているユーザー名です';
 
-    if (!email || !password) return errorEl.textContent = '入力を確認してください';
-    if (password.length < 6) return errorEl.textContent = 'パスワードは6文字以上にしてください';
-
-    try {
-      errorEl.textContent = '登録中...';
-      const cred = await this.auth.createUserWithEmailAndPassword(email, password);
-
-      // Send email verification
-      await cred.user.sendEmailVerification();
-
-      // Create user profile in Firestore
-      await this.db.collection('users').doc(cred.user.uid).set({
-        email: email,
-        displayName: displayName,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      this.closeModal();
-      this.showToast('🎉 登録完了！確認メールを送信しました。メールをご確認ください。', 'success');
-    } catch (e) {
-      console.error(e);
-      errorEl.textContent = this.getAuthErrorMessage(e.code);
-    }
+    this.users[username] = { password: btoa(password), createdAt: new Date().toISOString() };
+    localStorage.setItem('vrc_users', JSON.stringify(this.users));
+    this.completeAuth(username, '登録しました！');
   }
 
-  async doLogin() {
-    const email = document.getElementById('authEmail')?.value?.trim();
+  doLogin() {
+    const username = document.getElementById('authUsername')?.value?.trim();
     const password = document.getElementById('authPassword')?.value;
     const errorEl = document.getElementById('authError');
+    if (!username || !password) return errorEl.textContent = '入力を確認してください';
 
-    if (!email || !password) return errorEl.textContent = '入力を確認してください';
+    const user = this.users[username];
+    if (!user || user.password !== btoa(password)) return errorEl.textContent = '情報が正しくありません';
 
-    try {
-      errorEl.textContent = 'ログイン中...';
-      await this.auth.signInWithEmailAndPassword(email, password);
-      this.closeModal();
-      this.showToast('ログインしました！', 'success');
-    } catch (e) {
-      console.error(e);
-      errorEl.textContent = this.getAuthErrorMessage(e.code);
-    }
+    this.completeAuth(username, 'ログインしました！');
   }
 
-  getAuthErrorMessage(code) {
-    const messages = {
-      'auth/email-already-in-use': 'このメールアドレスは既に使用されています',
-      'auth/invalid-email': '無効なメールアドレスです',
-      'auth/weak-password': 'パスワードが弱すぎます',
-      'auth/user-not-found': 'ユーザーが見つかりません',
-      'auth/wrong-password': 'パスワードが間違っています',
-      'auth/invalid-credential': 'メールアドレスまたはパスワードが間違っています'
-    };
-    return messages[code] || 'エラーが発生しました';
+  completeAuth(username, message) {
+    this.isLoggedIn = true;
+    this.currentUser = username;
+    localStorage.setItem('vrc_logged_in', 'true');
+    localStorage.setItem('vrc_user', username);
+    this.updateLoginUI();
+    this.closeModal();
+    this.showToast(message, 'success');
+    this.navigateTo(this.currentPage);
   }
 
   login() { this.showAuthModal('login'); }
 
-  async logout() {
-    try {
-      await this.auth.signOut();
-      this.showToast('ログアウトしました', 'info');
-      this.navigateTo('home');
-    } catch (e) { console.error(e); }
+  logout() {
+    this.isLoggedIn = false;
+    this.currentUser = null;
+    localStorage.removeItem('vrc_logged_in');
+    localStorage.removeItem('vrc_user');
+    this.updateLoginUI();
+    this.showToast('ログアウトしました', 'info');
+    this.navigateTo('home');
   }
 
   updateLoginUI() {
     const loginBtn = document.getElementById('loginBtn');
     if (loginBtn) {
       if (this.isLoggedIn) {
-        loginBtn.innerHTML = `<span>👤 ${this.currentUserName || '名無し'}</span>`;
+        loginBtn.innerHTML = `<span>👤 ${this.currentUser}</span>`;
         loginBtn.onclick = () => { if (confirm('ログアウトしますか？')) this.logout(); };
       } else {
         loginBtn.innerHTML = '🔑 ログイン';
@@ -410,129 +260,10 @@ class VRCKaibenApp {
       case 'list': this.renderListPage(); break;
       case 'detail': this.renderDetailPage(param); break;
       case 'post': this.renderPostPage(); break;
+      case 'post': this.renderPostPage(); break;
       case 'myPage': this.renderMyPage(); break;
       case 'admin': this.renderAdminPage(); break;
-      case 'terms': this.renderTermsPage(); break;
-      case 'privacy': this.renderPrivacyPage(); break;
     }
-  }
-
-  showPage(page) {
-    // For static pages like terms/privacy
-    this.navigateTo(page);
-  }
-
-  renderTermsPage() {
-    const container = document.getElementById('logDetail');
-    container.innerHTML = `
-      <div class="static-page card">
-        <h1>📜 利用規約</h1>
-        <p class="text-muted">最終更新: 2026年1月</p>
-        <hr>
-        
-        <h2>第1条（適用）</h2>
-        <p>この利用規約（以下、「本規約」といいます。）は、VRChat改変ログ（以下、「当サービス」といいます。）の利用条件を定めるものです。登録ユーザーの皆さま（以下、「ユーザー」といいます。）には、本規約に従って、当サービスをご利用いただきます。</p>
-        
-        <h2>第2条（利用登録）</h2>
-        <ol>
-          <li>登録希望者が当サービスの定める方法によって利用登録を申請し、当サービスがこれを承認することによって、利用登録が完了するものとします。</li>
-          <li>当サービスは、以下の事由がある場合、利用登録を承認しないことがあります。
-            <ul>
-              <li>利用登録の申請に際して虚偽の事項を届け出た場合</li>
-              <li>本規約に違反したことがある者からの申請である場合</li>
-              <li>その他、当サービスが利用登録を相当でないと判断した場合</li>
-            </ul>
-          </li>
-        </ol>
-        
-        <h2>第3条（ユーザーIDおよびパスワードの管理）</h2>
-        <ol>
-          <li>ユーザーは、自己の責任において、当サービスのユーザーIDおよびパスワードを適切に管理するものとします。</li>
-          <li>ユーザーは、いかなる場合にも、ユーザーIDおよびパスワードを第三者に譲渡または貸与することはできません。</li>
-        </ol>
-        
-        <h2>第4条（コンテンツの投稿）</h2>
-        <ol>
-          <li>ユーザーは、投稿するコンテンツについて、自らが投稿する適法な権利を有していること、および第三者の権利を侵害していないことを保証するものとします。</li>
-          <li>ユーザーは、投稿コンテンツについて、当サービスに対し、非独占的な使用、複製、配布に関するライセンスを付与します。</li>
-        </ol>
-        
-        <h2>第5条（禁止事項）</h2>
-        <p>ユーザーは、当サービスの利用にあたり、以下の行為をしてはなりません。</p>
-        <ol>
-          <li>法令または公序良俗に違反する行為</li>
-          <li>犯罪行為に関連する行為</li>
-          <li>著作権、商標権等の知的財産権を侵害する行為</li>
-          <li>サーバーまたはネットワークの機能を妨害する行為</li>
-          <li>他のユーザーへの嫌がらせ・誹謗中傷</li>
-          <li>不正アクセスまたはその試み</li>
-          <li>その他、当サービスが不適切と判断する行為</li>
-        </ol>
-        
-        <h2>第6条（免責事項）</h2>
-        <ol>
-          <li>当サービスは、本サービスに関して、ユーザーに生じたいかなる損害についても責任を負いません。</li>
-          <li>当サービスは、ユーザー間で生じた紛争について一切責任を負いません。</li>
-        </ol>
-        
-        <h2>第7条（サービス内容の変更等）</h2>
-        <p>当サービスは、ユーザーへの事前の告知をもって、本サービスの内容を変更または廃止することがあります。</p>
-        
-        <h2>第8条（利用規約の変更）</h2>
-        <p>当サービスは、必要と判断した場合には、ユーザーの同意を得ることなく本規約を変更することができます。</p>
-        
-        <h2>第9条（準拠法・裁判管轄）</h2>
-        <p>本規約の解釈にあたっては、日本法を準拠法とします。</p>
-        
-        <button class="btn btn-secondary mt-lg" onclick="app.navigateTo('home')">← ホームに戻る</button>
-      </div>
-    `;
-    document.getElementById('page-detail').classList.add('active');
-  }
-
-  renderPrivacyPage() {
-    const container = document.getElementById('logDetail');
-    container.innerHTML = `
-      <div class="static-page card">
-        <h1>🔒 プライバシーポリシー</h1>
-        <p class="text-muted">最終更新: 2026年1月</p>
-        <hr>
-        
-        <h2>第1条（個人情報）</h2>
-        <p>「個人情報」とは、個人情報保護法にいう「個人情報」を指すものとし、生存する個人に関する情報であって、特定の個人を識別できる情報を指します。</p>
-        
-        <h2>第2条（個人情報の収集方法）</h2>
-        <p>当サービスは、ユーザーが利用登録をする際にメールアドレス等の情報をお尋ねすることがあります。</p>
-        
-        <h2>第3条（個人情報を収集・利用する目的）</h2>
-        <p>当サービスが個人情報を収集・利用する目的は、以下のとおりです。</p>
-        <ol>
-          <li>当サービスのサービスの提供・運営のため</li>
-          <li>ユーザーからのお問い合わせに回答するため</li>
-          <li>メンテナンス、重要なお知らせなど必要に応じたご連絡のため</li>
-          <li>利用規約に違反したユーザーの特定・利用お断りのため</li>
-          <li>ユーザーにご自身の登録情報の閲覧や変更を行っていただくため</li>
-        </ol>
-        
-        <h2>第4条（個人情報の第三者提供）</h2>
-        <p>当サービスは、法令で認められる場合を除いて、あらかじめユーザーの同意を得ることなく、第三者に個人情報を提供することはありません。</p>
-        
-        <h2>第5条（個人情報の開示）</h2>
-        <p>当サービスは、本人から個人情報の開示を求められたときは、本人に対し、遅滞なくこれを開示します。</p>
-        
-        <h2>第6条（個人情報の訂正および削除）</h2>
-        <p>ユーザーは、当サービスの保有する自己の個人情報が誤った情報である場合には、訂正または削除を請求することができます。</p>
-        
-        <h2>第7条（プライバシーポリシーの変更）</h2>
-        <p>本ポリシーの内容は、ユーザーに通知することなく、変更することができるものとします。</p>
-        
-        <h2>第8条（お問い合わせ窓口）</h2>
-        <p>本ポリシーに関するお問い合わせは、TwitterのDMまたはお問い合わせフォームよりお願いいたします。</p>
-        
-        <button class="btn btn-secondary mt-lg" onclick="app.navigateTo('home')">← ホームに戻る</button>
-      </div>
-    `;
-    document.getElementById('page-detail').classList.add('active');
   }
 
   // ========================================
@@ -590,73 +321,21 @@ class VRCKaibenApp {
     }
 
     // Populate dropdowns
-    // Use dynamic labels if available
-    const avatarLabel = (this.labels && this.labels.avatar) || 'アバター';
-    const partsLabel = (this.labels && this.labels.parts) || 'パーツ';
-
     const avatarSelect = document.getElementById('searchAvatar');
-    if (avatarSelect) avatarSelect.innerHTML = `<option value="">すべての${this.escapeHtml(avatarLabel)}</option>` + this.avatars.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    if (avatarSelect) avatarSelect.innerHTML = '<option value="">すべてのアバター</option>' + this.avatars.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
 
     const partsSelect = document.getElementById('searchParts');
-    if (partsSelect) partsSelect.innerHTML = `<option value="">すべての${this.escapeHtml(partsLabel)}</option>` + this.parts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
+    if (partsSelect) partsSelect.innerHTML = '<option value="">すべてのパーツ</option>' + this.parts.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
 
-    // Dynamic Tags with Trending Highlight
+    // Dynamic Tags
     const popularTags = this.calculatePopularTags();
     const tagsContainer = document.getElementById('popularTags');
     if (tagsContainer) {
-      const tagsToShow = popularTags.length > 0 ? popularTags : window.sampleData.popularTags.slice(0, 5);
-      tagsContainer.innerHTML = tagsToShow
-        .map((tag, i) => `<span class="tag-chip ${i < 3 ? 'trending' : ''}" onclick="app.searchByTag('${tag}')">${i < 3 ? '<span class="material-icons-round">local_fire_department</span>' : ''}${tag}</span>`)
-        .join('');
+      tagsContainer.innerHTML = (popularTags.length > 0 ? popularTags : window.sampleData.popularTags.slice(0, 5))
+        .map(tag => `<span class="tag-chip" onclick="app.searchByTag('${tag}')">${tag}</span>`).join('');
     }
 
     this.renderLogCards('recentLogs', this.logs.slice(0, 6));
-
-    // Render Ranking
-    this.renderRanking('weekly');
-  }
-
-  switchRankingTab(period) {
-    document.querySelectorAll('.ranking-tab').forEach(t => t.classList.remove('active'));
-    event.target.classList.add('active');
-    this.renderRanking(period);
-  }
-
-  renderRanking(period) {
-    const container = document.getElementById('rankingList');
-    if (!container) return;
-
-    const now = new Date();
-    let cutoffDate;
-    if (period === 'weekly') {
-      cutoffDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    } else {
-      cutoffDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
-
-    // Filter and sort by likes
-    let rankedLogs = this.logs
-      .filter(log => new Date(log.createdAt) >= cutoffDate)
-      .sort((a, b) => (b.likes || 0) - (a.likes || 0))
-      .slice(0, 10);
-
-    if (rankedLogs.length === 0) {
-      container.innerHTML = '<div class="text-muted text-center py-lg">データがありません</div>';
-      return;
-    }
-
-    container.innerHTML = rankedLogs.map((log, i) => `
-      <div class="ranking-item" onclick="app.navigateTo('detail', '${log.id}')">
-        <span class="ranking-position ${i < 3 ? 'top' : ''}">${i + 1}</span>
-        <div class="ranking-info">
-          <div class="ranking-title">${this.escapeHtml(log.title)}</div>
-          <div class="ranking-meta">
-            <span><span class="material-icons-round">favorite</span> ${log.likes || 0}</span>
-            <span><span class="material-icons-round">visibility</span> ${log.views || 0}</span>
-          </div>
-        </div>
-      </div>
-    `).join('');
   }
 
   renderListPage(filters = {}) {
@@ -673,13 +352,7 @@ class VRCKaibenApp {
       filteredLogs = filteredLogs.filter(log => log.problems.length === 1 && log.problems[0] === '特になし');
     }
     if (filters.avatarId) {
-      const selectedAvatar = this.avatars.find(a => a.id === filters.avatarId);
-      filteredLogs = filteredLogs.filter(log => {
-        // Match by avatarId OR by customAvatarName matching the selected avatar's name
-        if (log.avatarId === filters.avatarId) return true;
-        if (selectedAvatar && log.customAvatarName && log.customAvatarName.includes(selectedAvatar.name)) return true;
-        return false;
-      });
+      filteredLogs = filteredLogs.filter(log => log.avatarId === filters.avatarId);
     }
     if (filters.partsId) {
       filteredLogs = filteredLogs.filter(log => log.partsIds.includes(filters.partsId));
@@ -710,95 +383,8 @@ class VRCKaibenApp {
     }
   }
 
-  renderLogCards(containerId, logs) {
-    const container = document.getElementById(containerId);
-    if (!container) return;
-
-    if (logs.length === 0) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">🔍</div><p>ログが見つかりません</p></div>`;
-      return;
-    }
-
-    container.innerHTML = logs.map(log => this.createLogCard(log)).join('');
-  }
-
-  createLogCard(log) {
-    const avatarName = this.getAvatarName(log.avatarId) || log.customAvatarName || 'Unknown';
-    const dateStr = new Date(log.createdAt).toLocaleDateString();
-
-    // Star rating
-    const stars = '★'.repeat(log.successRate) + '☆'.repeat(5 - log.successRate);
-
-    // Tags
-    const tagsHtml = (log.tags || []).slice(0, 3).map(tag => `<span class="tag-chip text-xs">${tag}</span>`).join('');
-
-    // User name (cache lookup)
-    const userName = log.guestName || this.users[log.userId]?.displayName || '不明なユーザー';
-
-    // Difficulty badge class
-    const diffClass = {
-      'beginner': 'badge-success',
-      'intermediate': 'badge-warning',
-      'advanced': 'badge-danger'
-    }[log.difficulty] || 'badge-secondary';
-
-    const diffLabel = {
-      'beginner': '初心者向け',
-      'intermediate': '中級者向け',
-      'advanced': '上級者向け'
-    }[log.difficulty] || 'その他';
-
-    // Image logic - prefer isThumbnail marked image, fallback to first image
-    let thumbnailImage = null;
-    if (log.images && log.images.length > 0) {
-      thumbnailImage = log.images.find(img => img.isThumbnail) || log.images[0];
-    }
-    const thumbnailUrl = thumbnailImage ? thumbnailImage.dataUrl : null;
-    const thumbnailHtml = thumbnailUrl
-      ? `<div class="log-card-thumbnail"><img src="${thumbnailUrl}" alt=""></div>`
-      : `<div class="log-card-thumbnail placeholder"><span class="material-icons-round">image</span></div>`;
-
-    return `
-      <div class="log-card" onclick="app.navigateTo('detail', '${log.id}')">
-        ${thumbnailHtml}
-        <div class="log-card-body">
-          <div class="log-card-header">
-             <span class="badge ${diffClass}">${diffLabel}</span>
-             <span class="text-xs text-muted">${dateStr}</span>
-          </div>
-          <h3 class="log-card-title">${this.escapeHtml(log.title)}</h3>
-          <div class="log-card-meta">
-            <div><span class="material-icons-round text-xs">person</span> ${this.escapeHtml(userName)}</div>
-            <div><span class="material-icons-round text-xs">checkroom</span> ${this.escapeHtml(avatarName)}</div>
-          </div>
-          <div class="log-card-rating text-warning">${stars}</div>
-          <div class="log-card-tags mt-xs">
-            ${tagsHtml}
-          </div>
-          
-          <div class="log-card-footer">
-             <div class="log-stat heart">
-                <span class="material-icons-round">favorite</span>
-                <span class="log-stat-value">${log.likes || 0}</span>
-             </div>
-             <div class="log-stat view">
-                <span class="material-icons-round">visibility</span>
-                <span class="log-stat-value">${log.views || 0}</span>
-             </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  getAvatarName(id) {
-    const a = this.avatars.find(x => x.id === id);
-    return a ? a.name : null;
-  }
-
   renderPostPage() {
-    // Optional login check
-    this.checkLoginForPage('postForm', '投稿', true);
+    if (!this.checkLoginForPage('postForm', '投稿')) return;
 
     // Reset inputs
     this.uploadedImages = [];
@@ -833,7 +419,7 @@ class VRCKaibenApp {
           </div>
           
           <div class="form-group">
-            <label class="form-label">${this.labels.parts || 'パーツ'}（複数選択可）</label>
+            <label class="form-label">パーツ（複数選択可）</label>
             <div class="form-checkbox-group" id="partsCheckboxes">
               ${this.parts.map(p => `
                 <span class="form-checkbox-item">
@@ -851,7 +437,7 @@ class VRCKaibenApp {
         </div>
 
         <div class="form-group">
-            <label class="form-label">${this.labels.tool || '使用ツール'}</label>
+            <label class="form-label">使用ツール</label>
             <div class="form-checkbox-group">
                 ${this.toolOptions.map((tool, idx) => `
                     <span class="form-checkbox-item">
@@ -869,14 +455,14 @@ class VRCKaibenApp {
         
         <div class="form-row">
             <div class="form-group">
-            <label class="form-label">${this.labels.unity || 'Unityバージョン'}</label>
+            <label class="form-label">Unityバージョン</label>
             <select class="form-select" id="logUnity">
               ${this.unityVersionOptions.map(v => `<option value="${v}" ${v === '2022.3.22f1' ? 'selected' : ''}>${v}</option>`).join('')}
             </select>
             <input type="text" class="form-input mt-sm" id="logUnityCustom" placeholder="バージョン入力" style="display: none;">
           </div>
           <div class="form-group">
-            <label class="form-label">${this.labels.sdk || 'VRC SDKバージョン'}</label>
+            <label class="form-label">VRC SDKバージョン</label>
             <select class="form-select" id="logSdk">
               ${this.vrcSdkVersionOptions.map(v => `<option value="${v}" ${v === '3.5.2' ? 'selected' : ''}>${v}</option>`).join('')}
             </select>
@@ -903,7 +489,7 @@ class VRCKaibenApp {
         </div>
         
         <div class="form-group">
-          <label class="form-label">${this.labels.problem || '発生した問題'}</label>
+          <label class="form-label">発生した問題</label>
           <div class="form-checkbox-group" id="problemCheckboxes">
             ${this.problemOptions.map((p, idx) => `
               <span class="form-checkbox-item">
@@ -950,10 +536,6 @@ class VRCKaibenApp {
             <input type="file" id="imageInput" accept="image/*" multiple style="display: none;">
             <button type="button" class="btn btn-secondary" onclick="document.getElementById('imageInput').click()">📷 画像を選択</button>
             <span class="upload-hint">またはドラッグ&ドロップ</span>
-          </div>
-          <div class="custom-input-row mt-sm">
-             <input type="text" class="form-input" id="imageUrlInput" placeholder="https://... (画像URL)">
-             <button type="button" class="btn btn-secondary btn-sm" onclick="app.addImageUrl()">＋追加</button>
           </div>
           <div class="image-preview-grid" id="imagePreviewGrid"></div>
         </div>
@@ -1055,19 +637,19 @@ class VRCKaibenApp {
   }
 
   renderMasterDataHTML() {
-    // Helper for List Editor (Parts, Options)
-    this.renderMasterDataHTML.editor = (title, key, list) => `
-      <div class="master-editor-section">
+    // Helper to generate editor for a specific list
+    const editor = (title, key, list) => `
+      <div class="master-editor-section" data-tab="${key}">
          <h4 class="text-sm mb-sm">${title}</h4>
          <div class="custom-input-row mb-sm">
-            <input type="text" id="newMaster_${key}" class="form-input" placeholder="新しい項目...">
+            <input type="text" id="new_${key}" class="form-input" placeholder="新しい項目">
             <button class="btn btn-primary btn-sm" onclick="app.addMasterItem('${key}')">追加</button>
          </div>
          <div class="data-list-scroll">
             ${list.map(item => `
                <span class="badge badge-outline">
                  ${this.escapeHtml(item)}
-                 <span class="badge-remove" onclick="app.removeMasterItem('${key}', '${item.replace(/'/g, "\\'")}')">&times;</span>
+                 <span class="badge-remove" onclick="app.removeMasterItem('${key}', '${item}')">&times;</span>
                </span>
             `).join('')}
          </div>
@@ -1076,115 +658,22 @@ class VRCKaibenApp {
 
     return `
       <div class="admin-panel">
-        <div class="admin-panel-header"><div class="admin-panel-title">🛠️ マスタデータ管理</div></div>
-        
+        <div class="admin-panel-header">
+           <div class="admin-panel-title">🛠️ 完全マスターデータ管理</div>
+        </div>
         <div class="admin-tabs">
-          <button class="admin-tab-btn active" onclick="app.switchMasterTab('avatar')">アバター設定</button>
-          <button class="admin-tab-btn" onclick="app.switchMasterTab('parts')">パーツ設定</button>
-          <button class="admin-tab-btn" onclick="app.switchMasterTab('options')">選択肢設定</button>
-          <button class="admin-tab-btn" onclick="app.switchMasterTab('system')">システム設定</button>
+           <button class="admin-tab active" onclick="app.switchAdminTab('unityVersionOptions')">Unity</button>
+           <button class="admin-tab" onclick="app.switchAdminTab('vrcSdkVersionOptions')">SDK</button>
+           <button class="admin-tab" onclick="app.switchAdminTab('avatarPresets')">Avatar</button>
+           <button class="admin-tab" onclick="app.switchAdminTab('problemOptions')">Problem</button>
+           <button class="admin-tab" onclick="app.switchAdminTab('toolOptions')">Tool</button>
         </div>
-
-        <div id="masterTab_avatar" class="master-tab-content">
-          ${this.renderAvatarEditor()}
-        </div>
-        <div id="masterTab_parts" class="master-tab-content" style="display:none">
-          ${this.renderMasterDataHTML.editor(this.labels.parts || 'パーツ', 'parts', this.parts)}
-        </div>
-        <div id="masterTab_options" class="master-tab-content" style="display:none">
-          ${this.renderMasterDataHTML.editor(this.labels.unity || 'Unityバージョン', 'unityVersions', this.unityVersionOptions)}
-          ${this.renderMasterDataHTML.editor(this.labels.sdk || 'SDKバージョン', 'vrcSdkVersions', this.vrcSdkVersionOptions)}
-          ${this.renderMasterDataHTML.editor(this.labels.problem || '発生した問題', 'problemOptions', this.problemOptions)}
-          ${this.renderMasterDataHTML.editor(this.labels.tool || '使用ツール', 'toolOptions', this.toolOptions)}
-          ${this.renderMasterDataHTML.editor('アバタープリセット(旧)', 'avatarPresets', this.avatarPresets)}
-        </div>
-        <div id="masterTab_system" class="master-tab-content" style="display:none">
-          ${this.renderSystemSettings()}
-        </div>
-      </div>
-    `;
-  }
-
-  // Admin Tab Switcher & Editors
-  switchMasterTab(tabName) {
-    document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
-    event.target.classList.add('active');
-    document.querySelectorAll('.master-tab-content').forEach(c => c.style.display = 'none');
-    document.getElementById('masterTab_' + tabName).style.display = 'block';
-  }
-
-  renderAvatarEditor() {
-    return `
-      <div class="avatar-edit-form">
-        <h4 class="text-sm mb-sm">新規アバター追加</h4>
-        <div class="form-row">
-          <div class="form-group">
-            <input type="text" id="newAvatarName" class="form-input" placeholder="アバター名 (必須)">
-          </div>
-          <div class="form-group">
-            <input type="text" id="newAvatarCreator" class="form-input" placeholder="クリエイター名">
-          </div>
-          <div class="form-group">
-             <input type="text" id="newAvatarImage" class="form-input" placeholder="画像URL (任意)">
-          </div>
-          <button class="btn btn-primary" onclick="app.addAvatar()">追加</button>
-        </div>
-        <div id="avatarAddError" class="text-danger text-sm mt-xs"></div>
-      </div>
-      
-      <div class="admin-table-container">
-        <table class="admin-table">
-          <thead>
-            <tr>
-              <th style="width: 60px;">画像</th>
-              <th>アバター名</th>
-              <th>クリエイター</th>
-              <th style="width: 100px;">操作</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${this.avatars.map(a => `
-              <tr>
-                <td><img src="${a.imageUrl || 'https://via.placeholder.com/40'}" class="admin-avatar-thumb" onerror="this.src='https://via.placeholder.com/40'"></td>
-                <td>${this.escapeHtml(a.name)}</td>
-                <td>${this.escapeHtml(a.creator || '-')}</td>
-                <td>
-                   <div class="admin-actions">
-                     <button class="btn btn-danger btn-icon-sm" onclick="app.removeAvatar('${a.id}')">削除</button>
-                   </div>
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      </div>
-    `;
-  }
-
-  renderSystemSettings() {
-    return `
-      <div class="cfg-section">
-        <h4 class="text-sm mb-md">表示ラベル設定 (カテゴリ名の変更)</h4>
-        
-        <div class="config-label-edit">
-          <label>Unityバージョン</label>
-          <input type="text" class="form-input" value="${this.escapeHtml(this.labels.unity || 'Unityバージョン')}" onchange="app.updateLabel('unity', this.value)">
-        </div>
-        <div class="config-label-edit">
-          <label>SDKバージョン</label>
-          <input type="text" class="form-input" value="${this.escapeHtml(this.labels.sdk || 'SDKバージョン')}" onchange="app.updateLabel('sdk', this.value)">
-        </div>
-        <div class="config-label-edit">
-          <label>パーツ</label>
-          <input type="text" class="form-input" value="${this.escapeHtml(this.labels.parts || 'パーツ')}" onchange="app.updateLabel('parts', this.value)">
-        </div>
-        <div class="config-label-edit">
-           <label>発生した問題</label>
-           <input type="text" class="form-input" value="${this.escapeHtml(this.labels.problem || '発生した問題')}" onchange="app.updateLabel('problem', this.value)">
-        </div>
-        <div class="config-label-edit">
-           <label>使用ツール</label>
-           <input type="text" class="form-input" value="${this.escapeHtml(this.labels.tool || '使用ツール')}" onchange="app.updateLabel('tool', this.value)">
+        <div class="admin-tab-content">
+           <div id="tab_unityVersionOptions" class="tab-pane active">${editor('Unity Versions', 'unityVersionOptions', this.unityVersionOptions)}</div>
+           <div id="tab_vrcSdkVersionOptions" class="tab-pane">${editor('VRC SDK Versions', 'vrcSdkVersionOptions', this.vrcSdkVersionOptions)}</div>
+           <div id="tab_avatarPresets" class="tab-pane">${editor('Avatar Presets', 'avatarPresets', this.avatarPresets)}</div>
+           <div id="tab_problemOptions" class="tab-pane">${editor('Problem Options', 'problemOptions', this.problemOptions)}</div>
+           <div id="tab_toolOptions" class="tab-pane">${editor('Tool Options', 'toolOptions', this.toolOptions)}</div>
         </div>
       </div>
     `;
@@ -1268,146 +757,51 @@ class VRCKaibenApp {
     document.getElementById(`tab_${key}`).classList.add('active');
   }
 
-  async addAnnouncement() {
+  addAnnouncement() {
     const text = document.getElementById('annText').value.trim();
     const level = document.getElementById('annLevel').value;
     if (!text) return;
 
-    try {
-      await this.db.collection('announcements').add({
-        text, level, date: new Date().toISOString().split('T')[0],
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      this.showToast('お知らせを追加しました');
-      document.getElementById('annText').value = '';
-    } catch (e) { console.error(e); this.showToast('追加エラー', 'error'); }
+    this.announcements.unshift({
+      id: 'ann_' + Date.now(),
+      text: text,
+      level: level,
+      date: new Date().toISOString().split('T')[0]
+    });
+    this.saveData('announcements', this.announcements);
+    this.renderAdminPage();
   }
 
-  async deleteAnnouncement(id) {
+  deleteAnnouncement(id) {
     if (!confirm('削除しますか？')) return;
-    try {
-      await this.db.collection('announcements').doc(id).delete();
-      this.showToast('削除しました');
-    } catch (e) { console.error(e); this.showToast('削除エラー', 'error'); }
+    this.announcements = this.announcements.filter(a => a.id !== id);
+    this.saveData('announcements', this.announcements);
+    this.renderAdminPage();
   }
 
-  // Admin Data Management
-  async deleteLog(id) {
-    if (!confirm('本当に削除しますか？')) return;
-    try {
-      await this.db.collection('logs').doc(id).delete();
-      this.showToast('ログを削除しました');
-    } catch (e) {
-      console.error(e);
-      const msg = e.code === 'permission-denied' ? '権限がありません (Permission Denied)' : e.message;
-      this.showToast('削除エラー: ' + msg, 'error');
-    }
-  }
-
-  adminResetPassword(u) {
-    alert('Firebase版ではコンソールからメールを送信するか、ユーザー自身にリセットさせてください。');
-  }
-
-  adminDeleteUser(u) {
-    alert('Firebase版ではコンソールから削除してください。');
-  }
-
-  // Master Data Helper
-  // Master Data Helper
-  async addMasterItem(key) {
-    const input = document.getElementById('newMaster_' + key);
-    const val = input ? input.value.trim() : null;
+  addMasterItem(key) {
+    // General handler for adding items to any master list
+    const input = document.getElementById(`new_${key}`);
+    const val = input.value.trim();
     if (!val) return;
+    if (this[key].includes(val)) return alert('既に存在します');
 
-    try {
-      const updates = {};
-      updates[key] = firebase.firestore.FieldValue.arrayUnion(val);
-      await this.db.collection('masterData').doc('config').set(updates, { merge: true });
-      this.showToast('追加しました', 'success');
-      input.value = '';
-    } catch (e) { console.error(e); this.showToast('更新エラー', 'error'); }
+    this[key].push(val);
+    this.saveData(key, this[key]);
+    this.renderAdminPage();
+    // Ideally we should stay on the same tab. The render resets it to default? 
+    // We can save active tab in a temporary variable or pass it to render.
+    // simpler: after render, switch to tab.
+    setTimeout(() => this.switchAdminTab(key), 0);
   }
 
-  async removeMasterItem(key, val) {
-    if (!confirm(`"${val}" を削除しますか？`)) return;
-    try {
-      const doc = await this.db.collection('masterData').doc('config').get();
-      if (!doc.exists) return;
-
-      const currentList = doc.data()[key] || [];
-      const newList = currentList.filter(item => item !== val);
-
-      const updates = {};
-      updates[key] = newList;
-
-      await this.db.collection('masterData').doc('config').update(updates);
-      this.showToast('削除しました', 'success');
-    } catch (e) {
-      console.error(e);
-      const msg = e.code === 'permission-denied' ? '権限がありません' : e.message;
-      this.showToast('更新エラー: ' + msg, 'error');
-    }
+  removeMasterItem(key, val) {
+    if (!confirm('削除しますか？')) return;
+    this[key] = this[key].filter(item => item !== val);
+    this.saveData(key, this[key]);
+    this.renderAdminPage();
+    setTimeout(() => this.switchAdminTab(key), 0);
   }
-
-  async addAvatar() {
-    const name = document.getElementById('newAvatarName').value.trim();
-    const creator = document.getElementById('newAvatarCreator').value.trim();
-    const image = document.getElementById('newAvatarImage').value.trim();
-
-    if (!name) {
-      document.getElementById('avatarAddError').textContent = 'アバター名は必須です';
-      return;
-    }
-
-    const newAvatar = {
-      id: 'av_' + Date.now(),
-      name: name,
-      creator: creator,
-      imageUrl: image
-    };
-
-    try {
-      await this.db.collection('masterData').doc('config').update({
-        avatars: firebase.firestore.FieldValue.arrayUnion(newAvatar)
-      });
-      this.showToast('アバターを追加しました', 'success');
-      // Clear inputs
-      document.getElementById('newAvatarName').value = '';
-      document.getElementById('newAvatarCreator').value = '';
-      document.getElementById('newAvatarImage').value = '';
-      document.getElementById('avatarAddError').textContent = '';
-    } catch (e) { console.error(e); this.showToast('エラーが発生しました', 'error'); }
-  }
-
-  async removeAvatar(id) {
-    if (!confirm('このアバター設定を削除しますか？')) return;
-
-    try {
-      const doc = await this.db.collection('masterData').doc('config').get();
-      if (!doc.exists) return;
-      const data = doc.data();
-      const avatars = data.avatars || [];
-
-      const newAvatars = avatars.filter(a => a.id !== id);
-
-      await this.db.collection('masterData').doc('config').update({ avatars: newAvatars });
-      this.showToast('削除しました', 'success');
-    } catch (e) {
-      console.error(e);
-      const msg = e.code === 'permission-denied' ? '権限がありません' : e.message;
-      this.showToast('削除エラー: ' + msg, 'error');
-    }
-  }
-
-  async updateLabel(key, value) {
-    try {
-      const labels = { ...this.labels, [key]: value };
-      await this.db.collection('masterData').doc('config').set({ labels }, { merge: true });
-      this.showToast('ラベルを更新しました', 'success');
-    } catch (e) { console.error(e); this.showToast('ラベル更新エラー', 'error'); }
-  }
-
-
 
   initDashboardCharts() {
     // Placeholder for charts
@@ -1416,8 +810,25 @@ class VRCKaibenApp {
 
 
 
-  // Note: Admin user management functions are now handled via Firebase Console
-  // (see adminResetPassword and adminDeleteUser above)
+  // Admin User Management
+  adminResetPassword(username) {
+    const newPass = prompt(`ユーザー「${username}」の新しいパスワードを入力してください:`);
+    if (newPass) {
+      this.users[username].password = btoa(newPass);
+      localStorage.setItem('vrc_users', JSON.stringify(this.users));
+      this.showToast('パスワードを変更しました', 'success');
+      this.renderAdminPage();
+    }
+  }
+
+  adminDeleteUser(username) {
+    if (confirm(`ユーザー「${username}」を削除しますか？\n（復元できません）`)) {
+      delete this.users[username];
+      localStorage.setItem('vrc_users', JSON.stringify(this.users));
+      this.showToast('ユーザーを削除しました');
+      this.renderAdminPage();
+    }
+  }
 
   adminAddUser() {
     const u = document.getElementById('adminNewUser').value.trim();
@@ -1443,7 +854,14 @@ class VRCKaibenApp {
   }
 
   // Admin Actions
-
+  deleteLog(id) {
+    if (confirm('本当にこのログを削除しますか？\nこの操作は取り消せません。')) {
+      this.logs = this.logs.filter(l => l.id !== id);
+      this.saveData('logs', this.logs);
+      this.renderAdminPage();
+      this.showToast('ログを削除しました');
+    }
+  }
 
   addAdminOption(type, inputId) {
     const input = document.getElementById(inputId);
@@ -1557,7 +975,6 @@ class VRCKaibenApp {
     if (tagInput) {
       tagInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
-          if (e.isComposing) return; // Ignore IME composition
           e.preventDefault();
           let tag = tagInput.value.trim();
           if (tag && !tag.startsWith('#')) tag = '#' + tag;
@@ -1569,28 +986,6 @@ class VRCKaibenApp {
         }
       });
     }
-
-    // Enter key support for other inputs
-    const enterInputs = [
-      { id: 'customPartsInput', action: () => this.addCustomPart() },
-      { id: 'customProblemInput', action: () => this.addCustomProblem() },
-      { id: 'customToolInput', action: () => this.addCustomTool() },
-      { id: 'referenceLinkInput', action: () => this.addReferenceLink() },
-      { id: 'imageUrlInput', action: () => this.addImageUrl() }
-    ];
-
-    enterInputs.forEach(item => {
-      const el = document.getElementById(item.id);
-      if (el) {
-        el.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter') {
-            if (e.isComposing) return; // Ignore IME
-            e.preventDefault();
-            item.action();
-          }
-        });
-      }
-    });
 
     // Image handling
     const imageInput = document.getElementById('imageInput');
@@ -1605,20 +1000,6 @@ class VRCKaibenApp {
     // Submit
     const form = document.getElementById('logForm');
     if (form) form.addEventListener('submit', (e) => { e.preventDefault(); this.submitLog(); });
-  }
-
-  addImageUrl() {
-    const input = document.getElementById('imageUrlInput');
-    const url = input?.value.trim();
-    if (url) {
-      this.uploadedImages.push({
-        id: 'img_' + Date.now() + Math.random().toString(36).substr(2, 5),
-        dataUrl: url,
-        isNsfw: false
-      });
-      this.renderImagePreviews();
-      input.value = '';
-    }
   }
 
   // ... (Other helpers: setupCallbackToggle, addTag, etc)
@@ -1671,102 +1052,20 @@ class VRCKaibenApp {
     const max = 5 - this.uploadedImages.length;
     Array.from(files).slice(0, max).forEach(f => {
       if (f.type.startsWith('image/')) {
-        this.compressImage(f).then(dataUrl => {
-          this.uploadedImages.push({
-            id: 'img_' + Date.now() + Math.random().toString(36).substr(2, 5),
-            dataUrl: dataUrl,
-            isNsfw: false
-          });
-          this.renderImagePreviews();
-        });
+        const r = new FileReader();
+        r.onload = e => { this.uploadedImages.push({ id: 'img_' + Date.now() + Math.random().toString(36).substr(2, 5), dataUrl: e.target.result, isNsfw: false }); this.renderImagePreviews(); };
+        r.readAsDataURL(f);
       }
-    });
-  }
-
-  // Image Compression - preserves text readability
-  compressImage(file, maxWidth = 1600, quality = 0.85) {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          // Calculate new dimensions
-          let width = img.width;
-          let height = img.height;
-
-          if (width > maxWidth) {
-            height = Math.round(height * (maxWidth / width));
-            width = maxWidth;
-          }
-
-          // Create canvas
-          const canvas = document.createElement('canvas');
-          canvas.width = width;
-          canvas.height = height;
-
-          // Draw with high quality
-          const ctx = canvas.getContext('2d');
-          ctx.imageSmoothingEnabled = true;
-          ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(img, 0, 0, width, height);
-
-          // Output as JPEG with specified quality
-          const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
-
-          // Log compression result
-          const originalSize = (e.target.result.length / 1024).toFixed(1);
-          const compressedSize = (compressedDataUrl.length / 1024).toFixed(1);
-          console.log(`Image compressed: ${originalSize}KB → ${compressedSize}KB (${Math.round((1 - compressedSize / originalSize) * 100)}% reduction)`);
-
-          resolve(compressedDataUrl);
-        };
-        img.src = e.target.result;
-      };
-      reader.readAsDataURL(file);
     });
   }
   renderImagePreviews() {
     const c = document.getElementById('imagePreviewGrid');
-    if (!c) return;
-
-    // Default first image as thumbnail if none selected
-    if (this.uploadedImages.length > 0 && !this.uploadedImages.some(img => img.isThumbnail)) {
-      this.uploadedImages[0].isThumbnail = true;
-    }
-
-    c.innerHTML = this.uploadedImages.map((img, i) => `
-      <div class="image-preview-item ${img.isThumbnail ? 'is-thumbnail' : ''}">
-        <img src="${img.dataUrl}">
-        ${img.isThumbnail ? '<div class="thumbnail-badge"><span class="material-icons-round">star</span>サムネ</div>' : ''}
-        <div class="image-preview-actions">
-          <button class="btn-thumbnail ${img.isThumbnail ? 'active' : ''}" type="button" onclick="app.setThumbnail(${i})" title="サムネイルに設定">
-            <span class="material-icons-round">photo_camera</span>
-          </button>
-          <label class="nsfw-toggle"><input type="checkbox" ${img.isNsfw ? 'checked' : ''} onchange="app.toggleNsfw(${i})">🔞</label>
-          <button class="btn-remove" type="button" onclick="app.removeImage(${i})">×</button>
-        </div>
-      </div>
-    `).join('');
+    if (c) c.innerHTML = this.uploadedImages.map((img, i) => `<div class="image-preview-item"><img src="${img.dataUrl}"><div class="image-preview-actions"><label class="nsfw-toggle"><input type="checkbox" ${img.isNsfw ? 'checked' : ''} onchange="app.toggleNsfw(${i})">🔞NSFW</label><button class="btn-remove" type="button" onclick="app.removeImage(${i})">×</button></div></div>`).join('');
   }
-
-  setThumbnail(index) {
-    this.uploadedImages.forEach((img, i) => {
-      img.isThumbnail = (i === index);
-    });
-    this.renderImagePreviews();
-    this.showToast('サムネイルを設定しました', 'success');
-  }
-
   toggleNsfw(i) { if (this.uploadedImages[i]) this.uploadedImages[i].isNsfw = !this.uploadedImages[i].isNsfw; }
   removeImage(i) { this.uploadedImages.splice(i, 1); this.renderImagePreviews(); }
 
-  async submitLog() {
-    // Guest Access Allowed
-    // if (!this.currentUser) { this.showToast('ログインしてください', 'error'); this.login(); return; }
-
-    const isGuest = !this.currentUser;
-    const currentUid = this.currentUser || 'guest';
-
+  submitLog() {
     const title = document.getElementById('logTitle').value;
     let avatarId = document.getElementById('logAvatar').value;
     let customAvatarName = null;
@@ -1788,34 +1087,21 @@ class VRCKaibenApp {
     const tools = Array.from(document.querySelectorAll('input[name="tools"]:checked')).map(c => c.value);
     if (this.customTools.length) tools.push(...this.customTools);
 
-    // Note: Not storing Base64 in Firestore (1MB limit). Images are local-only for now.
-    // TODO: Use Firebase Storage for proper image hosting
-    const imgs = this.uploadedImages.map(i => ({ id: i.id, isNsfw: i.isNsfw || false }));
+    const imgs = this.uploadedImages.map(i => ({ id: i.id, dataUrl: i.dataUrl, isNsfw: i.isNsfw }));
 
     if (!title || !solution) { this.showToast('必須項目を入力してください', 'error'); return; }
 
     const newLog = {
-      title, avatarId, customAvatarName, partsIds: parts, customPartsNames: this.customParts,
+      id: 'log_' + Date.now(), title, avatarId, customAvatarName, partsIds: parts, customPartsNames: this.customParts,
       unityVersion: unity, vrcSdkVersion: sdk, difficulty: diff, successRate: success, problems: probs, solution,
       tags: this.selectedTags, tools, referenceLinks: this.referenceLinks, images: imgs,
-      createdAt: new Date().toISOString(), userId: currentUid, isGuest, guestName: isGuest ? 'ゲスト' : null,
-      // Firestore Metadata
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      createdAt: new Date().toISOString().split('T')[0], userId: this.currentUser
     };
 
-    try {
-      this.showToast('送信中...', 'info');
-      const docRef = await this.db.collection('logs').add(newLog);
-
-      // Clear form
-      this.customParts = []; this.customProblems = []; this.customTools = []; this.selectedTags = []; this.uploadedImages = []; this.referenceLinks = [];
-
-      this.showToast('✨ 投稿が完了しました！', 'success');
-      this.navigateTo('detail', docRef.id);
-    } catch (e) {
-      console.error(e);
-      this.showToast('投稿に失敗しました: ' + e.message, 'error');
-    }
+    this.logs.unshift(newLog);
+    this.saveData('logs', this.logs);
+    this.showToast('✨ 投稿が完了しました！', 'success');
+    this.navigateTo('detail', newLog.id);
   }
 
   // ========================================
@@ -1824,9 +1110,6 @@ class VRCKaibenApp {
   renderDetailPage(id) {
     const log = this.logs.find(l => l.id === id);
     if (!log) { this.navigateTo('list'); return; }
-
-    // Increment view count
-    this.incrementViews(id);
 
     const av = this.avatars.find(a => a.id === log.avatarId);
     const avName = log.customAvatarName || (av ? av.name : '不明');
@@ -1837,25 +1120,12 @@ class VRCKaibenApp {
     if (!c) return;
 
     const isBM = this.bookmarks.includes(id);
-    const isLiked = (log.likedBy || []).includes(this.currentUser?.uid);
-    const likeCount = log.likes || 0;
-    const viewCount = log.views || 0;
 
     c.innerHTML = `
         <div class="detail-header">
-            <div class="detail-stats">
-               <span class="stat-item"><span class="material-icons-round">visibility</span> ${viewCount}</span>
-               <span class="stat-item heart ${isLiked ? 'liked' : ''}" onclick="app.toggleLike('${log.id}')">
-                  <span class="material-icons-round">${isLiked ? 'favorite' : 'favorite_border'}</span> ${likeCount}
-               </span>
-            </div>
             <div class="detail-actions">
-                <button class="btn-icon ${isBM ? 'active' : ''}" onclick="app.toggleBookmark('${log.id}')" title="ブックマーク">
-                   <span class="material-icons-round">bookmark${isBM ? '' : '_border'}</span>
-                </button>
-                <button class="btn-icon" onclick="app.shareToTwitter('${log.title}','${log.id}')" title="Xでシェア">
-                   <span class="material-icons-round">share</span>
-                </button>
+                <button class="btn-icon ${isBM ? 'active' : ''}" onclick="app.toggleBookmark('${log.id}')">❤️</button>
+                <button class="btn-icon" onclick="app.shareToTwitter('${log.title}','${log.id}')">🐦</button>
             </div>
             <h1 class="detail-title">${this.escapeHtml(log.title)}</h1>
             <div class="detail-meta">${this.getDifficultyBadge(log.difficulty)} <div class="stars">${this.renderStars(log.successRate)}</div> <span class="text-muted">${log.createdAt}</span></div>
@@ -1937,10 +1207,8 @@ class VRCKaibenApp {
     }).join('');
   }
 
-  checkLoginForPage(containerId, title, isOptional = false) {
+  checkLoginForPage(containerId, title) {
     if (!this.isLoggedIn) {
-      if (isOptional) return true; // Allow access if optional
-
       const c = document.getElementById(containerId);
       if (c) c.innerHTML = `<div class="login-notice"><div class="login-notice-icon">🔐</div><h3 class="login-notice-title">ログインが必要です</h3><p class="login-notice-text">${title}にはログインしてください</p><button class="btn btn-primary" onclick="app.login()">🔑 ログイン</button></div>`;
       return false;
@@ -1976,79 +1244,12 @@ class VRCKaibenApp {
     setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 3000);
   }
 
-  async toggleBookmark(id) {
-    if (!this.currentUser) { this.showToast('ブックマークするにはログインが必要です', 'warning'); return; }
-
-    const isAdded = !this.bookmarks.includes(id);
-    if (!isAdded) {
-      this.bookmarks = this.bookmarks.filter(i => i !== id);
-      this.showToast('削除しました');
-    } else {
-      this.bookmarks.push(id);
-      this.showToast('お気に入りに追加！', 'success');
-    }
-
-    // UI Update immediate
+  toggleBookmark(id) {
+    if (this.bookmarks.includes(id)) { this.bookmarks = this.bookmarks.filter(i => i !== id); this.showToast('削除しました'); }
+    else { this.bookmarks.push(id); this.showToast('お気に入りに追加！', 'success'); }
+    localStorage.setItem('vrc_bookmarks', JSON.stringify(this.bookmarks));
     this.renderDetailPage(id);
-
-    try {
-      await this.db.collection('users').doc(this.currentUser).set({ bookmarks: this.bookmarks }, { merge: true });
-    } catch (e) { console.error('Bookmark sync fail', e); }
   }
-
-  async toggleLike(id) {
-    if (!this.currentUser) { this.showToast('いいねするにはログインが必要です', 'warning'); return; }
-
-    const logRef = this.db.collection('logs').doc(id);
-    const log = this.logs.find(l => l.id === id);
-    if (!log) return;
-
-    const likedBy = log.likedBy || [];
-    const isLiked = likedBy.includes(this.currentUser.uid);
-
-    try {
-      if (isLiked) {
-        // Unlike
-        await logRef.update({
-          likes: firebase.firestore.FieldValue.increment(-1),
-          likedBy: firebase.firestore.FieldValue.arrayRemove(this.currentUser.uid)
-        });
-        log.likes = (log.likes || 1) - 1;
-        log.likedBy = likedBy.filter(uid => uid !== this.currentUser.uid);
-        this.showToast('いいねを取り消しました');
-      } else {
-        // Like
-        await logRef.update({
-          likes: firebase.firestore.FieldValue.increment(1),
-          likedBy: firebase.firestore.FieldValue.arrayUnion(this.currentUser.uid)
-        });
-        log.likes = (log.likes || 0) + 1;
-        log.likedBy = [...likedBy, this.currentUser.uid];
-        this.showToast('いいね！しました ❤️', 'success');
-      }
-      this.renderDetailPage(id);
-    } catch (e) {
-      console.error('Like toggle fail', e);
-      this.showToast('エラーが発生しました', 'error');
-    }
-  }
-
-  async incrementViews(id) {
-    // Only increment once per session per log
-    if (!this.viewedLogs) this.viewedLogs = new Set();
-    if (this.viewedLogs.has(id)) return;
-    this.viewedLogs.add(id);
-
-    const log = this.logs.find(l => l.id === id);
-    if (log) log.views = (log.views || 0) + 1;
-
-    try {
-      await this.db.collection('logs').doc(id).update({
-        views: firebase.firestore.FieldValue.increment(1)
-      });
-    } catch (e) { console.error('View count fail', e); }
-  }
-
   shareToTwitter(t, id) {
     const url = window.location.origin + window.location.pathname;
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(`${t} #VRC改変ログ`)}&url=${encodeURIComponent(url)}`, '_blank');
@@ -2147,7 +1348,7 @@ class VRCKaibenApp {
              </div>
              <div class="profile-info">
                 <div class="profile-icon">
-                   ${user.icon ? (user.icon.startsWith('http') ? `<img src="${user.icon}" alt="icon">` : `<span class="default-icon">${user.icon}</span>`) : '<span class="default-icon">👤</span>'}
+                   ${user.icon ? `<img src="${user.icon}" alt="icon">` : '<span class="default-icon">👤</span>'}
                 </div>
                 <div class="profile-details">
                    <h2 class="profile-name">${this.escapeHtml(user.displayName || this.currentUser)}</h2>
@@ -2169,21 +1370,9 @@ class VRCKaibenApp {
                    <textarea id="editBio" class="form-textarea">${this.escapeHtml(user.bio || '')}</textarea>
                 </div>
                 <div class="form-group">
-                   <label class="form-label">アイコン</label>
-                   <div class="icon-preset-grid">
-                     ${['👤', '🐱', '🐰', '🦊', '🐻', '🐼', '🐨', '🐸', '🦄', '🐺', '🦋', '🌸', '💀', '👻', '🤖', '🎀', '✨', '🌙', '⭐', '💫', '🔥', '❄️', '🌈', '💜'].map(emoji => `
-                       <button type="button" class="icon-preset-btn ${user.icon === emoji ? 'selected' : ''}" onclick="app.selectIconPreset('${emoji}')">${emoji}</button>
-                     `).join('')}
-                   </div>
-                   <input type="hidden" id="editIconPreset" value="${user.icon && user.icon.length <= 4 ? user.icon : ''}">
+                   <label class="form-label">アイコン画像 (URL)</label>
+                   <input type="text" id="editIcon" class="form-input" placeholder="https://..." value="${this.escapeHtml(user.icon || '')}">
                 </div>
-                <details class="mt-sm">
-                   <summary class="text-muted text-sm" style="cursor:pointer;">🔧 上級者向け：カスタムURL</summary>
-                   <div class="form-group mt-sm">
-                      <input type="text" id="editIcon" class="form-input" placeholder="https://..." value="${user.icon && user.icon.startsWith('http') ? this.escapeHtml(user.icon) : ''}">
-                      <p class="text-muted text-xs mt-xs">Discord/Imgur等の画像URLを入力</p>
-                   </div>
-                </details>
                 <button class="btn btn-primary" onclick="app.saveProfile()">保存する</button>
              </div>
           </div>
@@ -2210,44 +1399,22 @@ class VRCKaibenApp {
     form.style.display = form.style.display === 'none' ? 'block' : 'none';
   }
 
-  selectIconPreset(emoji) {
-    // Update hidden input
-    document.getElementById('editIconPreset').value = emoji;
-    // Clear custom URL
-    document.getElementById('editIcon').value = '';
-    // Update visual selection
-    document.querySelectorAll('.icon-preset-btn').forEach(btn => {
-      btn.classList.toggle('selected', btn.textContent === emoji);
-    });
-  }
-
-  async saveProfile() {
+  saveProfile() {
     const dName = document.getElementById('editDisplayName').value.trim();
     const bio = document.getElementById('editBio').value.trim();
-    const customUrl = document.getElementById('editIcon').value.trim();
-    const presetEmoji = document.getElementById('editIconPreset').value;
+    const icon = document.getElementById('editIcon').value.trim();
 
-    // Priority: Custom URL > Preset Emoji
-    const icon = customUrl || presetEmoji || '';
+    if (this.users[this.currentUser]) {
+      this.users[this.currentUser].displayName = dName;
+      this.users[this.currentUser].bio = bio;
+      this.users[this.currentUser].icon = icon;
 
-    if (!this.currentUser) return;
-
-    try {
-      await this.db.collection('users').doc(this.currentUser).set({
-        displayName: dName,
-        bio: bio,
-        icon: icon,
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      }, { merge: true });
-
+      localStorage.setItem('vrc_users', JSON.stringify(this.users));
       this.showToast('プロフィールを更新しました', 'success');
-      this.toggleProfileEdit();
-    } catch (e) {
-      console.error(e);
-      this.showToast('更新エラー: ' + e.message, 'error');
+      this.renderMyPage(); // info update
+      this.updateLoginUI(); // header name update?
     }
   }
-
 
   generateHeatmapHTML(logs) {
     // Generate last 365 days squares
@@ -2285,52 +1452,40 @@ class VRCKaibenApp {
   // Social Features (Phase 4)
   // ========================================
 
-  async addComment(logId) {
-    if (!this.currentUser) { this.showToast('ログインしてください', 'error'); this.login(); return; }
-
+  addComment(logId) {
     const text = document.getElementById('commentText').value.trim();
     if (!text) return;
 
     const log = this.logs.find(l => l.id === logId);
     if (!log) return;
 
-    // Create comment object
-    const newComment = {
-      userId: this.currentUser, // UID
-      userName: this.currentUserName, // Snapshot of name
-      text: text,
-      createdAt: new Date().toISOString().split('T')[0] // Simple date
-    };
+    if (!log.comments) log.comments = [];
 
-    try {
-      await this.db.collection('logs').doc(logId).update({
-        comments: firebase.firestore.FieldValue.arrayUnion(newComment)
-      });
-      this.showToast('コメントを投稿しました', 'success');
-      // No need to manual push/render if listener is fast enough, but for UX:
-      // (Listener will update eventually)
-    } catch (e) {
-      console.error(e);
-      this.showToast('エラーが発生しました', 'error');
+    log.comments.push({
+      userId: this.currentUser,
+      text: text,
+      createdAt: new Date().toISOString().split('T')[0]
+    });
+
+    this.saveData('logs', this.logs);
+    this.showToast('コメントを投稿しました', 'success');
+    this.renderDetailPage(logId);
+
+    // Notification (Mock)
+    if (log.userId !== this.currentUser) {
+      setTimeout(() => this.showToast(`投稿者(${log.userId})に通知を送りました`, 'info'), 1000);
     }
   }
 
-  async deleteComment(logId, idx) {
+  deleteComment(logId, idx) {
     if (!confirm('コメントを削除しますか？')) return;
 
     const log = this.logs.find(l => l.id === logId);
-    if (!log || !log.comments) return;
-
-    // Use a copy to modify
-    const newComments = [...log.comments];
-    newComments.splice(idx, 1);
-
-    try {
-      await this.db.collection('logs').doc(logId).update({ comments: newComments });
+    if (log && log.comments) {
+      log.comments.splice(idx, 1);
+      this.saveData('logs', this.logs);
       this.showToast('コメントを削除しました');
-    } catch (e) {
-      console.error(e);
-      this.showToast('削除エラー', 'error');
+      this.renderDetailPage(logId);
     }
   }
 
