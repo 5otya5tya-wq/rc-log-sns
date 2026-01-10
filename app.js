@@ -1193,25 +1193,73 @@ class VRCKaibenApp {
   renderUserManagementHTML() {
     return `
       <div class="admin-panel">
-         <div class="admin-panel-header"><div class="admin-panel-title">👥 ユーザー管理</div></div>
+         <div class="admin-panel-header">
+           <div class="admin-panel-title">👥 ユーザー管理</div>
+         </div>
+         
+         <!-- Search Box -->
+         <div class="admin-search-box mb-md">
+           <input type="text" class="form-input" id="userSearchInput" placeholder="ユーザーID、ニックネーム、メールで検索..." oninput="app.filterUsers()">
+         </div>
+         
          <div class="admin-table-wrapper">
            <table class="admin-table">
-             <thead><tr><th>ユーザー名</th><th>操作</th></tr></thead>
-             <tbody>
-               ${Object.entries(this.users).map(([u, d]) => `
-                 <tr>
-                   <td>${this.escapeHtml(u)}</td>
-                   <td>
-                     <button class="btn btn-warning btn-sm" onclick="app.adminResetPassword('${u}')">パスワード変更</button>
-                     ${u !== 'admin' ? `<button class="btn btn-danger btn-sm" onclick="app.adminDeleteUser('${u}')">削除</button>` : ''}
-                   </td>
-                 </tr>
-               `).join('')}
+             <thead>
+               <tr>
+                 <th>ニックネーム</th>
+                 <th>メール</th>
+                 <th>ユーザーID</th>
+                 <th>登録日</th>
+                 <th>操作</th>
+               </tr>
+             </thead>
+             <tbody id="userTableBody">
+               ${this.renderUserRows(Object.entries(this.users))}
              </tbody>
            </table>
          </div>
+         <div class="text-muted text-sm mt-sm">合計: ${Object.keys(this.users).length} 人</div>
       </div>
     `;
+  }
+
+  renderUserRows(users) {
+    if (users.length === 0) {
+      return '<tr><td colspan="5" class="text-center text-muted">ユーザーが見つかりません</td></tr>';
+    }
+    return users.map(([uid, data]) => {
+      const displayName = data?.displayName || '名前未設定';
+      const email = data?.email || '不明';
+      const createdAt = data?.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString() : '不明';
+      return `
+        <tr>
+          <td><strong>${this.escapeHtml(displayName)}</strong></td>
+          <td class="text-sm">${this.escapeHtml(email)}</td>
+          <td class="text-xs text-muted" title="${uid}">${uid.substring(0, 12)}...</td>
+          <td class="text-sm">${createdAt}</td>
+          <td>
+            <div class="admin-actions">
+              <button class="btn btn-warning btn-sm" onclick="app.adminResetPassword('${uid}')">PW変更</button>
+              <button class="btn btn-danger btn-sm" onclick="app.adminDeleteUser('${uid}')">削除</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  filterUsers() {
+    const query = document.getElementById('userSearchInput')?.value?.toLowerCase() || '';
+    const tbody = document.getElementById('userTableBody');
+    if (!tbody) return;
+
+    const filtered = Object.entries(this.users).filter(([uid, data]) => {
+      const displayName = (data?.displayName || '').toLowerCase();
+      const email = (data?.email || '').toLowerCase();
+      return uid.toLowerCase().includes(query) || displayName.includes(query) || email.includes(query);
+    });
+
+    tbody.innerHTML = this.renderUserRows(filtered);
   }
 
   renderLogManagementHTML() {
