@@ -7,11 +7,13 @@
   <title>VRC改変ログ - アバター改変情報共有サイト</title>
   <meta name="description" content="VRChatの改変情報を検索・共有できるサイト。初心者でも安心して改変に挑戦できる情報が満載。">
 
-  <!-- Google Fonts -->
+  <!-- Fonts & Icons -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700;800&display=swap"
+  <link
+    href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&family=Zen+Kaku+Gothic+New:wght@400;700&family=Dancing+Script:wght@700&family=Oswald:wght@700&display=swap"
     rel="stylesheet">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
 
   <link rel="stylesheet" href="styles.css">
 </head>
@@ -25,22 +27,34 @@
        ======================================== -->
   <header class="header">
     <div class="container header-inner">
-      <div class="logo">
-        <span class="logo-icon">🎀</span>
-        <span>VRC改変ログ</span>
+      <div class="logo custom-logo" onclick="app.navigateTo('home')">
+        <img src="logo-pop.png" alt="VRC改変ログ" id="siteLogo" class="logo-img">
       </div>
 
-      <nav class="nav">
-        <a href="#" class="nav-link active" data-page="home">🏠 ホーム</a>
-        <a href="#" class="nav-link" data-page="list">📋 一覧</a>
-        <a href="#" class="nav-link" data-page="post">✏️ 投稿</a>
-        <a href="#" class="nav-link" data-page="myPage" title="マイページ" id="navMyPage" style="display:none">👤 マイページ</a>
-        <a href="#" class="nav-link" id="loginBtn">🔑 ログイン</a>
+      <nav class="nav-links">
+        <a href="#" class="nav-link active" data-page="home"><span class="material-icons-round">home</span> ホーム</a>
+        <a href="#" class="nav-link" data-page="list"><span class="material-icons-round">list_alt</span> 一覧</a>
+        <a href="#" class="nav-link" data-page="post"><span class="material-icons-round">edit</span> 投稿</a>
+        <a href="#" class="nav-link" data-page="myPage" title="マイページ" id="navMyPage" style="display:none"><span
+            class="material-icons-round">person</span> マイページ</a>
+        <a href="#" class="nav-link" id="loginBtn"><span class="material-icons-round">login</span> ログイン</a>
       </nav>
 
-      <button class="theme-toggle" id="themeToggle" title="テーマ切替">🌙</button>
+      <button class="theme-toggle" id="themeToggle" title="サイバーモードに切替"><span
+          class="material-icons-round">sports_esports</span></button>
     </div>
   </header>
+
+  <!-- Site-wide Announcement Banner -->
+  <div class="site-announcement" id="siteAnnouncement">
+    <span class="announcement-content">
+      <span class="material-icons-round">campaign</span>
+      <span id="announcementText">サイトへようこそ！新機能を続々追加中です 🎉</span>
+    </span>
+    <button class="announcement-close" onclick="app.closeAnnouncement()">
+      <span class="material-icons-round">close</span>
+    </button>
+  </div>
 
   <main>
     <!-- ========================================
@@ -66,7 +80,7 @@
       <!-- Search Box -->
       <div class="search-box">
         <div class="search-input-wrapper">
-          <span class="search-icon">🔍</span>
+          <span class="search-icon material-icons-round">search</span>
           <input type="text" class="search-input" placeholder="キーワードで検索...">
         </div>
 
@@ -95,10 +109,25 @@
         </div>
       </div>
 
+      <!-- Ranking Section -->
+      <section class="mt-lg">
+        <h2 class="section-title">
+          <span class="material-icons-round">leaderboard</span>
+          人気ランキング
+        </h2>
+        <div class="ranking-tabs">
+          <button class="ranking-tab active" onclick="app.switchRankingTab('weekly')">週間</button>
+          <button class="ranking-tab" onclick="app.switchRankingTab('monthly')">月間</button>
+        </div>
+        <div class="ranking-list" id="rankingList">
+          <!-- Ranking items rendered by JS -->
+        </div>
+      </section>
+
       <!-- Recent Logs -->
       <section class="mt-lg">
         <h2 class="section-title">
-          <span class="section-title-icon">✨</span>
+          <span class="material-icons-round">auto_awesome</span>
           新着改変ログ
         </h2>
 
